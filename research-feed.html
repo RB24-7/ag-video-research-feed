@@ -1,0 +1,1680 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Ag Video Research Feed</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #050608;
+        --panel: rgba(14, 16, 20, 0.86);
+        --line: rgba(255, 255, 255, 0.12);
+        --text: #f7f7f8;
+        --muted: rgba(247, 247, 248, 0.64);
+        --soft: rgba(255, 255, 255, 0.08);
+        --hot: #ff355f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Avenir Next,
+          Trebuchet MS,
+          Verdana,
+          sans-serif;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .ghost-button {
+        appearance: none;
+        cursor: pointer;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--muted);
+        padding: 9px 15px;
+      }
+
+      .ghost-button.primary {
+        background: white;
+        color: #07080b;
+      }
+
+      .reel-feed {
+        width: 100vw;
+        height: 100dvh;
+        overflow-y: auto;
+        scroll-snap-type: y mandatory;
+        scrollbar-width: none;
+      }
+
+      .reel-feed::-webkit-scrollbar {
+        display: none;
+      }
+
+      .reel-card {
+        position: relative;
+        display: grid;
+        place-items: center;
+        min-height: 100dvh;
+        padding: 18px 16px;
+        scroll-snap-align: start;
+      }
+
+      .phone-frame {
+        position: relative;
+        width: min(94vw, calc((100dvh - 42px) * 0.5625));
+        max-width: 480px;
+        height: min(calc(100dvh - 42px), 860px);
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 30px;
+        background: #000;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
+      }
+
+      .phone-frame video {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+        background: #000;
+      }
+
+      .reel-actions {
+        position: absolute;
+        right: 12px;
+        bottom: 74px;
+        z-index: 5;
+        display: grid;
+        gap: 10px;
+      }
+
+      .round-action {
+        display: grid;
+        place-items: center;
+        width: 58px;
+        height: 58px;
+        cursor: pointer;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.42);
+        color: white;
+        font-size: 0.72rem;
+        line-height: 1;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      .round-action.active {
+        background: var(--hot);
+        border-color: rgba(255, 255, 255, 0.32);
+      }
+
+      .study-overlay {
+        position: absolute;
+        z-index: 4;
+        left: 14px;
+        right: 84px;
+        bottom: 18px;
+        display: grid;
+        gap: 10px;
+        pointer-events: none;
+      }
+
+      .study-label {
+        width: fit-content;
+        max-width: 100%;
+        overflow: hidden;
+        padding: 8px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.42);
+        color: rgba(255, 255, 255, 0.88);
+        font-size: 0.78rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      .keyword-panel {
+        display: grid;
+        gap: 8px;
+        width: min(100%, 320px);
+        pointer-events: auto;
+      }
+
+      .keyword-question {
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7);
+      }
+
+      .keyword-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+
+      .keyword-chip {
+        appearance: none;
+        cursor: pointer;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.48);
+        color: white;
+        padding: 8px 10px;
+        font-size: 0.8rem;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      .keyword-chip.active {
+        background: white;
+        color: #08090c;
+      }
+
+      .reel-progress {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.14);
+      }
+
+      .reel-progress span {
+        display: block;
+        width: 0%;
+        height: 100%;
+        background: white;
+      }
+
+      .admin-panel {
+        position: fixed;
+        z-index: 50;
+        top: 0;
+        right: 0;
+        width: min(460px, 100vw);
+        height: 100dvh;
+        overflow-y: auto;
+        padding: 22px;
+        background: rgba(8, 9, 12, 0.96);
+        border-left: 1px solid var(--line);
+        box-shadow: -24px 0 80px rgba(0, 0, 0, 0.48);
+        transform: translateX(100%);
+        transition: transform 200ms ease;
+      }
+
+      .admin-panel.open {
+        transform: translateX(0);
+      }
+
+      .admin-panel h2 {
+        margin: 0 0 8px;
+        font-size: 1.5rem;
+      }
+
+      .admin-panel p {
+        margin: 0 0 18px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .admin-card {
+        margin: 12px 0;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--soft);
+      }
+
+      .admin-stat {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 9px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      .admin-stat:last-child {
+        border-bottom: none;
+      }
+
+      .admin-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 16px 0;
+      }
+
+      .field-label {
+        display: grid;
+        gap: 7px;
+        margin: 12px 0;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+
+      .admin-panel input {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.07);
+        color: var(--text);
+        padding: 12px 13px;
+        outline: none;
+      }
+
+      .admin-panel input:focus {
+        border-color: rgba(255, 255, 255, 0.46);
+      }
+
+      .status {
+        position: fixed;
+        z-index: 40;
+        left: 16px;
+        bottom: 16px;
+        max-width: min(420px, calc(100vw - 32px));
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(5, 6, 8, 0.82);
+        color: var(--muted);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      @media (max-width: 720px) {
+        .phone-frame {
+          width: min(100vw - 18px, calc((100dvh - 20px) * 0.5625));
+          height: min(calc(100dvh - 20px), 880px);
+          border-radius: 22px;
+        }
+
+        .reel-card {
+          padding: 10px 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="reel-feed" id="reelFeed" aria-label="Vertical video feed"></section>
+    </main>
+
+    <aside class="admin-panel" id="adminPanel" aria-label="Research panel">
+      <h2>Research data</h2>
+      <p>
+        Viewers do not need to see this panel. This standalone file stores analytics in this browser and can export JSON
+        or CSV for analysis.
+      </p>
+      <div class="admin-actions">
+        <button class="ghost-button primary" id="exportJson" type="button">Export JSON</button>
+        <button class="ghost-button" id="exportCsv" type="button">Export CSV</button>
+        <button class="ghost-button" id="exportSummaryCsv" type="button">Export summary</button>
+        <button class="ghost-button" id="clearData" type="button">Clear local data</button>
+      </div>
+      <div class="admin-card">
+        <strong>Research setup</strong>
+        <p>Optional labels for exports. Viewers still only see the video feed.</p>
+        <label class="field-label">
+          Participant code
+          <input id="participantCode" type="text" autocomplete="off" />
+        </label>
+        <label class="field-label">
+          Study or run label
+          <input id="studyLabel" type="text" placeholder="pilot-01, class-demo, batch-a..." autocomplete="off" />
+        </label>
+        <div class="admin-actions">
+          <button class="ghost-button primary" id="saveResearchSetup" type="button">Save setup</button>
+          <button class="ghost-button" id="newParticipant" type="button">New participant</button>
+        </div>
+      </div>
+      <div class="admin-card">
+        <strong>Add Dropbox video</strong>
+        <p>
+          Demo videos load automatically from <code>data/dropbox-videos.json</code>. This quick add tool is only for
+          researcher testing in this browser.
+        </p>
+        <label class="field-label">
+          Video title
+          <input id="dropboxTitle" type="text" placeholder="Optional label for research exports" autocomplete="off" />
+        </label>
+        <label class="field-label">
+          Dropbox video link
+          <input id="dropboxVideoUrl" type="url" placeholder="https://www.dropbox.com/s/..." autocomplete="off" />
+        </label>
+        <label class="field-label">
+          Poster link
+          <input id="dropboxPosterUrl" type="url" placeholder="Optional Dropbox/image link" autocomplete="off" />
+        </label>
+        <div class="admin-actions">
+          <button class="ghost-button primary" id="addDropboxVideo" type="button">Add video</button>
+          <button class="ghost-button" id="clearDropboxVideos" type="button">Remove Dropbox links</button>
+        </div>
+      </div>
+      <div class="admin-card" id="adminSummary"></div>
+      <div class="admin-card" id="topVideos"></div>
+    </aside>
+
+    <div class="status" id="status">Loading video library...</div>
+
+    <script>
+      const MANIFEST_PATHS = ['data/dropbox-videos.json'];
+      const SESSION_KEY = 'signal-loop-html-session';
+      const PARTICIPANT_KEY = 'signal-loop-html-participant';
+      const STUDY_LABEL_KEY = 'signal-loop-html-study-label';
+      const EVENTS_KEY = 'signal-loop-html-events';
+      const LIKES_KEY = 'signal-loop-html-likes';
+      const CUSTOM_DROPBOX_KEY = 'signal-loop-html-dropbox-videos';
+      const UNSENT_EVENTS_KEY = 'signal-loop-html-unsent-events';
+      const STUDY_STATE_KEY = 'signal-loop-html-study-flow';
+      const CLOUD_ANALYTICS = {
+        endpoint: '',
+        supabaseUrl: '',
+        supabaseAnonKey: '',
+        supabaseTable: 'video_events'
+      };
+      const AUTO_SAVE_ENDPOINT = CLOUD_ANALYTICS.endpoint;
+      const AUTO_SAVE_BATCH_SIZE = 30;
+      const QUEUE_SIZE = 18;
+      const WATCH_UNLOCK_PERCENT = 65;
+      const FALLBACK_KEYWORDS = ['pistachios', 'orchard', 'factory', 'jars', 'green', 'people'];
+
+      const state = {
+        sessionId: getSessionId(),
+        participantId: getParticipantId(),
+        studyLabel: localStorage.getItem(STUDY_LABEL_KEY) || 'pilot',
+        manifestItems: [],
+        customDropboxItems: loadJson(CUSTOM_DROPBOX_KEY, []),
+        items: [],
+        queue: [],
+        study: normalizeStudyState(loadJson(STUDY_STATE_KEY, {})),
+        activeId: null,
+        mode: 'reel',
+        muted: true,
+        events: loadJson(EVENTS_KEY, []),
+        unsentEvents: loadJson(UNSENT_EVENTS_KEY, []),
+        likes: loadJson(LIKES_KEY, {}),
+        exposure: null,
+        watchPercent: {},
+        milestones: {},
+        impressions: new Set()
+      };
+
+      let eventSequence = state.events.length;
+      let sessionStartedAt = Date.now();
+      let autoSaveTimer = null;
+      let autoSaveInFlight = false;
+      let reelObserver = null;
+
+      const reelFeed = document.getElementById('reelFeed');
+      const adminPanel = document.getElementById('adminPanel');
+      const adminSummary = document.getElementById('adminSummary');
+      const topVideos = document.getElementById('topVideos');
+      const statusBox = document.getElementById('status');
+      const participantCodeInput = document.getElementById('participantCode');
+      const studyLabelInput = document.getElementById('studyLabel');
+      const dropboxTitleInput = document.getElementById('dropboxTitle');
+      const dropboxVideoUrlInput = document.getElementById('dropboxVideoUrl');
+      const dropboxPosterUrlInput = document.getElementById('dropboxPosterUrl');
+
+      applyUrlSetup();
+      participantCodeInput.value = state.participantId;
+      studyLabelInput.value = state.studyLabel;
+
+      if (isResearchAdminEnabled()) {
+        adminPanel.classList.add('open');
+        renderAdmin();
+      }
+      document.getElementById('exportJson').addEventListener('click', exportJson);
+      document.getElementById('exportCsv').addEventListener('click', exportCsv);
+      document.getElementById('exportSummaryCsv').addEventListener('click', exportSummaryCsv);
+      document.getElementById('clearData').addEventListener('click', clearLocalData);
+      document.getElementById('saveResearchSetup').addEventListener('click', saveResearchSetup);
+      document.getElementById('newParticipant').addEventListener('click', startNewParticipant);
+      document.getElementById('addDropboxVideo').addEventListener('click', addDropboxVideo);
+      document.getElementById('clearDropboxVideos').addEventListener('click', clearDropboxVideos);
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          flushExposure('tab_hidden');
+          recordEvent(state.activeId || 'page', 'visibility_change', document.visibilityState, { surface: state.mode });
+          flushAutoSave({ beacon: true });
+        } else {
+          resumeExposure('visible');
+          recordEvent(state.activeId || 'page', 'visibility_change', document.visibilityState, { surface: state.mode });
+          flushAutoSave();
+        }
+      });
+
+      window.addEventListener('beforeunload', () => {
+        flushExposure('page_exit');
+        recordEvent('session', 'session_end', 'page_exit', { totalSessionMs: Date.now() - sessionStartedAt });
+        flushAutoSave({ beacon: true });
+      });
+
+      window.addEventListener('online', () => flushAutoSave());
+
+      init();
+
+      async function init() {
+        flushAutoSave();
+        recordEvent('session', 'session_start', '', {
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          language: navigator.language
+        });
+
+        try {
+          const manifests = await Promise.all(
+            MANIFEST_PATHS.map((manifestPath) => fetch(manifestPath, { cache: 'no-store' }).then((response) => {
+              if (!response.ok) {
+                console.warn('Optional manifest was not loaded:', manifestPath);
+                return [];
+              }
+              return response.json();
+            }))
+          );
+
+          state.manifestItems = manifests.flatMap((manifest, index) =>
+            normalizeManifestItems(manifest, MANIFEST_PATHS[index])
+          );
+          rebuildLibrary();
+
+          if (!state.queue.length) {
+            setStatus('No videos found in the manifests.');
+            return;
+          }
+
+          renderReelFeed();
+          setupReelObserver();
+          startInitialExposure();
+          updatePlayback();
+          renderAdmin();
+          setStatus(`${state.queue.length} videos loaded for this session.`);
+        } catch (error) {
+          setStatus(
+            'Could not load the video list. Ask the researcher to confirm the data folder was uploaded with this HTML file.'
+          );
+          console.error(error);
+        }
+      }
+
+      function rebuildLibrary(preferredId) {
+        const publishedManifestItems = state.manifestItems.filter((item) => item && item.published !== false);
+        const hostedDropboxItems = publishedManifestItems.filter(isHostedDropboxItem);
+        const manifestItems = hostedDropboxItems.length ? hostedDropboxItems : publishedManifestItems;
+
+        state.items = [...manifestItems, ...state.customDropboxItems]
+          .filter((item) => item && item.published !== false)
+          .map(resolveItem)
+          .filter((item) => item.videoUrl);
+
+        const hasStudyFlow = syncStudyFlow(preferredId);
+        state.queue = hasStudyFlow ? buildStudyQueue(preferredId) : buildRandomQueue(state.items, QUEUE_SIZE);
+
+        if (preferredId) {
+          const preferred = state.items.find((item) => item.id === preferredId);
+          if (preferred && !hasStudyFlow) {
+            state.queue = [
+              preferred,
+              ...state.queue.filter((item) => item.id !== preferredId)
+            ].slice(0, QUEUE_SIZE);
+          }
+        }
+
+        if (!state.queue.some((item) => item.id === state.activeId)) {
+          state.activeId = state.queue[0]?.id || null;
+        }
+      }
+
+      function refreshLibrary(preferredId) {
+        flushExposure('library_refresh');
+        rebuildLibrary(preferredId);
+        if (preferredId && state.queue.some((item) => item.id === preferredId)) {
+          state.activeId = preferredId;
+        }
+        renderReelFeed();
+        setupReelObserver();
+        resumeExposure('library_refresh');
+        updatePlayback();
+        renderAdmin();
+      }
+
+      function normalizeManifestItems(payload, manifestPath) {
+        if (Array.isArray(payload)) {
+          return payload.map((item, index) => normalizeManifestItem(item, { manifestPath, index })).filter(Boolean);
+        }
+
+        if (!payload || typeof payload !== 'object') return [];
+
+        const videos = Array.isArray(payload.videos)
+          ? payload.videos.map((item, index) => normalizeManifestItem(item, { manifestPath, index })).filter(Boolean)
+          : [];
+        const sets = Array.isArray(payload.sets)
+          ? payload.sets.flatMap((set, index) => normalizeStudySet(set, { manifestPath, index }))
+          : [];
+
+        return [...videos, ...sets];
+      }
+
+      function normalizeStudySet(set, context) {
+        if (!set || typeof set !== 'object') return [];
+
+        const studySetId = set.studySetId || set.id || `dropbox-set-${context.index + 1}`;
+        const keywords = set.questionKeywords || set.keywords || FALLBACK_KEYWORDS;
+        const baseTags = [...new Set(['dropbox', ...(set.tags || [])])];
+        const seedInput = set.seed || set.original || set.ad || set.reference || set;
+
+        const seed = normalizeManifestItem(seedInput, {
+          manifestPath: context.manifestPath,
+          index: 0,
+          id: `${studySetId}-seed`,
+          title: set.title || 'Original ad',
+          summary: set.summary || 'Original Dropbox-hosted ad for this research set.',
+          category: set.category || 'Reference',
+          tags: [...baseTags, 'seed', 'reference'],
+          published: set.published !== false,
+          studyEligible: true,
+          importSource: 'dropbox',
+          outputFolder: set.outputFolder || '',
+          studySetId,
+          studyRole: 'seed',
+          shortLabel: 'Original',
+          questionKeywords: keywords
+        });
+
+        if (!seed) return [];
+
+        const variants = (set.variants || set.generated || set.outputs || []).map((variant, index) => {
+          const label = variant?.shortLabel || variant?.label || variant?.modelName || `V${index + 1}`;
+          return normalizeManifestItem(variant, {
+            manifestPath: context.manifestPath,
+            index,
+            id: `${studySetId}-variant-${index + 1}`,
+            title: `${label} variant`,
+            summary: set.variantSummary || 'Generated Dropbox-hosted variation for the original ad.',
+            category: 'Generated',
+            tags: [...baseTags, 'generated', 'variant'],
+            published: set.published !== false,
+            studyEligible: true,
+            importSource: 'dropbox',
+            studySetId,
+            studyRole: 'variant',
+            seedId: seed.id,
+            variantOrder: index + 1,
+            modelName: variant?.modelName || variant?.model || label,
+            shortLabel: label,
+            questionKeywords: keywords
+          });
+        }).filter(Boolean);
+
+        return [seed, ...variants];
+      }
+
+      function normalizeManifestItem(item, defaults = {}) {
+        if (!item || typeof item !== 'object') return null;
+
+        const rawUrl = item.url || item.videoUrl || item.dropboxUrl || item.href;
+        const rawPosterUrl = item.posterUrl || item.thumbnailUrl || item.imageUrl;
+        const source = item.source || (rawUrl ? {
+          kind: 'url',
+          provider: inferUrlProvider(rawUrl),
+          url: rawUrl
+        } : undefined);
+        const poster = item.poster || (rawPosterUrl ? {
+          kind: 'url',
+          provider: inferUrlProvider(rawPosterUrl),
+          url: rawPosterUrl
+        } : undefined);
+        const stableId = item.id || defaults.id || rawUrl || `${defaults.manifestPath || 'manifest'}-${defaults.index || 0}`;
+
+        return {
+          ...defaults,
+          ...item,
+          id: slugId(stableId),
+          tags: [...new Set([...(defaults.tags || []), ...(item.tags || [])])],
+          questionKeywords: item.questionKeywords || item.keywords || defaults.questionKeywords,
+          source,
+          poster
+        };
+      }
+
+      function inferUrlProvider(rawUrl) {
+        try {
+          const host = new URL(rawUrl).hostname.toLowerCase();
+          if (host.endsWith('dropbox.com') || host.endsWith('dropboxusercontent.com')) return 'dropbox';
+        } catch {}
+        return 'url';
+      }
+
+      function isHostedDropboxItem(item) {
+        return item?.importSource === 'dropbox' ||
+          (item?.source?.kind === 'url' && (
+            item.source.provider === 'dropbox' ||
+            inferUrlProvider(item.source.url) === 'dropbox'
+          ));
+      }
+
+      function syncStudyFlow(preferredId) {
+        const seeds = state.items.filter((item) => item.studyRole === 'seed' && item.studySetId);
+        if (!seeds.length) return false;
+
+        const preferredSeed = seeds.find((item) => item.id === preferredId);
+        const savedSeed = seeds.find((item) => item.id === state.study.seedId);
+        const seed = preferredSeed || savedSeed || chooseStudySeed(seeds);
+        const variants = getStudyVariants(seed);
+
+        state.study.seedId = seed.id;
+        state.study.studySetId = seed.studySetId;
+        if (state.study.phase === 'variants' && !variants.length) {
+          state.study.phase = 'seed';
+        }
+        saveStudyState();
+        return true;
+      }
+
+      function chooseStudySeed(seeds) {
+        return [...seeds].sort((left, right) => {
+          return seededHash(`${state.sessionId}:${left.id}`) - seededHash(`${state.sessionId}:${right.id}`);
+        })[0];
+      }
+
+      function buildStudyQueue(preferredId) {
+        const seed = getCurrentSeed();
+        if (state.study.phase === 'variants') {
+          return getStudyVariants(seed);
+        }
+
+        const seeds = state.items.filter((item) => item.studyRole === 'seed' && item.studySetId);
+        const queue = buildRandomQueue(seeds, QUEUE_SIZE);
+        const preferred = seeds.find((item) => item.id === preferredId);
+
+        if (!preferred) return queue;
+        return [
+          preferred,
+          ...queue.filter((item) => item.id !== preferred.id)
+        ].slice(0, QUEUE_SIZE);
+      }
+
+      function getCurrentSeed() {
+        return state.items.find((item) => item.id === state.study.seedId && item.studyRole === 'seed');
+      }
+
+      function getStudyVariants(seed) {
+        if (!seed) return [];
+        return state.items
+          .filter((item) =>
+            item.studyRole === 'variant' &&
+            (item.seedId === seed.id || item.studySetId === seed.studySetId)
+          )
+          .sort((left, right) => {
+            const leftOrder = Number(left.variantOrder || 99);
+            const rightOrder = Number(right.variantOrder || 99);
+            if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+            return seededHash(`${state.sessionId}:${left.id}`) - seededHash(`${state.sessionId}:${right.id}`);
+          });
+      }
+
+      function getKeywordOptions(item) {
+        const seed = state.items.find((candidate) => candidate.id === item.seedId) || getCurrentSeed();
+        const keywords = item.questionKeywords || seed?.questionKeywords || FALLBACK_KEYWORDS;
+        return [...new Set(keywords)].slice(0, 6);
+      }
+
+      function resolveItem(item) {
+        return {
+          ...item,
+          videoUrl: resolveAsset(item.source),
+          posterUrl: item.poster ? resolveAsset(item.poster) : '',
+          sourceLabel: item.source?.kind === 'url' ? item.source.provider || 'shared link' : 'local media'
+        };
+      }
+
+      function resolveAsset(asset) {
+        if (!asset) return '';
+        if (asset.kind === 'url') {
+          return normalizeUrl(asset.url, asset.provider);
+        }
+        return asset.path;
+      }
+
+      function normalizeUrl(rawUrl, provider) {
+        try {
+          const url = new URL(rawUrl);
+          const host = url.hostname.toLowerCase();
+          if (provider === 'dropbox' || host.endsWith('dropbox.com')) {
+            url.searchParams.delete('dl');
+            url.searchParams.set('raw', '1');
+          }
+          return url.toString();
+        } catch {
+          return rawUrl;
+        }
+      }
+
+      function renderReelFeed() {
+        reelFeed.innerHTML = state.queue
+          .map((item) => {
+            const isVariant = item.studyRole === 'variant';
+            const chosenKeyword = state.study.keywordChoices[item.id];
+            const studyLabel = isVariant ? item.shortLabel || item.modelName || 'Generated' : '';
+            return `
+              <article class="reel-card" data-video-id="${escapeAttr(item.id)}">
+                <div class="phone-frame">
+                  <video
+                    data-video
+                    data-video-id="${escapeAttr(item.id)}"
+                    src="${escapeAttr(item.videoUrl)}"
+                    poster="${escapeAttr(item.posterUrl || '')}"
+                    playsinline
+                    preload="metadata"
+                    loop
+                  ></video>
+                  <div class="study-overlay">
+                    ${studyLabel ? `<span class="study-label">${escapeHtml(studyLabel)}</span>` : ''}
+                    ${isVariant ? `
+                      <div class="keyword-panel">
+                        <div class="keyword-question">Main keyword?</div>
+                        <div class="keyword-chips">
+                          ${getKeywordOptions(item).map((keyword) => `
+                            <button
+                              class="${chosenKeyword === keyword ? 'keyword-chip active' : 'keyword-chip'}"
+                              data-keyword-video="${escapeAttr(item.id)}"
+                              data-keyword="${escapeAttr(keyword)}"
+                              type="button"
+                            >${escapeHtml(keyword)}</button>
+                          `).join('')}
+                        </div>
+                      </div>
+                    ` : ''}
+                  </div>
+                  <div class="reel-actions">
+                    <button class="${state.likes[item.id] ? 'round-action active' : 'round-action'}" data-like="${escapeAttr(item.id)}" type="button">
+                      ${state.likes[item.id] ? 'Liked' : 'Like'}
+                    </button>
+                    ${isVariant ? `
+                      <button class="${state.study.selectedVariantId === item.id ? 'round-action active' : 'round-action'}" data-best="${escapeAttr(item.id)}" type="button">
+                        Best
+                      </button>
+                    ` : ''}
+                    <button class="round-action" data-mute="${escapeAttr(item.id)}" type="button">${state.muted ? 'Muted' : 'Audio'}</button>
+                  </div>
+                  <div class="reel-progress"><span data-progress="${escapeAttr(item.id)}"></span></div>
+                </div>
+              </article>
+            `;
+          })
+          .join('');
+
+        reelFeed.querySelectorAll('[data-like]').forEach((button) => {
+          button.addEventListener('click', () => toggleLike(button.getAttribute('data-like')));
+        });
+
+        reelFeed.querySelectorAll('[data-best]').forEach((button) => {
+          button.addEventListener('click', () => chooseVariant(button.getAttribute('data-best')));
+        });
+
+        reelFeed.querySelectorAll('[data-keyword-video]').forEach((button) => {
+          button.addEventListener('click', () => chooseKeyword(
+            button.getAttribute('data-keyword-video'),
+            button.getAttribute('data-keyword')
+          ));
+        });
+
+        reelFeed.querySelectorAll('[data-mute]').forEach((button) => {
+          button.addEventListener('click', () => toggleMute());
+        });
+
+        reelFeed.querySelectorAll('video').forEach(wireVideoEvents);
+      }
+
+      function wireVideoEvents(video) {
+        const videoId = video.dataset.videoId;
+        video.addEventListener('loadedmetadata', () => {
+          recordEvent(videoId, 'media_loaded', '', {
+            durationMs: video.duration ? Math.round(video.duration * 1000) : undefined,
+            videoWidth: video.videoWidth || undefined,
+            videoHeight: video.videoHeight || undefined,
+            surface: state.mode
+          });
+        });
+        video.addEventListener('play', () => recordEvent(videoId, 'play', '', { surface: state.mode }));
+        video.addEventListener('pause', () => recordEvent(videoId, 'pause', '', { surface: state.mode }));
+        video.addEventListener('stalled', () => recordEvent(videoId, 'stalled', '', { surface: state.mode }));
+        video.addEventListener('waiting', () => recordEvent(videoId, 'buffer_wait', '', { surface: state.mode }));
+        video.addEventListener('error', () => {
+          recordEvent(videoId, 'media_error', String(video.error?.code || ''), {
+            networkState: video.networkState,
+            readyState: video.readyState,
+            currentSrc: video.currentSrc,
+            surface: state.mode
+          });
+        });
+        video.addEventListener('timeupdate', () => {
+          if (!video.duration) return;
+          const percent = (video.currentTime / video.duration) * 100;
+          const progress = document.querySelector(`[data-progress="${cssEscape(videoId)}"]`);
+          if (progress) progress.style.width = `${Math.min(100, percent)}%`;
+          trackProgress(videoId, percent);
+        });
+        video.addEventListener('ended', () => {
+          recordEvent(videoId, 'complete', '100', { surface: state.mode });
+        });
+        video.addEventListener('seeked', () => {
+          if (video.currentTime < 1) {
+            recordEvent(videoId, 'replay', '', { surface: state.mode });
+          }
+        });
+      }
+
+      function setupReelObserver() {
+        if (reelObserver) {
+          reelObserver.disconnect();
+        }
+
+        reelObserver = new IntersectionObserver(
+          (entries) => {
+            const visible = entries
+              .filter((entry) => entry.isIntersecting)
+              .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
+            if (!visible) return;
+
+            const nextId = visible.target.getAttribute('data-video-id');
+            if (!nextId) return;
+
+            if (!state.impressions.has(nextId)) {
+              state.impressions.add(nextId);
+              recordEvent(nextId, 'impression', '', { surface: 'reel' });
+            }
+
+            if (nextId !== state.activeId) {
+              setActive(nextId, 'scroll');
+              updatePlayback();
+            }
+          },
+          { threshold: [0.55, 0.75, 0.92] }
+        );
+
+        document.querySelectorAll('.reel-card').forEach((card) => reelObserver.observe(card));
+      }
+
+      function setActive(videoId, reason) {
+        if (!videoId || videoId === state.activeId) return;
+        flushExposure(reason || 'switch_video');
+        state.activeId = videoId;
+        state.exposure = { videoId, startedAt: Date.now() };
+        recordEvent(videoId, 'video_enter', reason || 'active', { surface: state.mode });
+      }
+
+      function flushExposure(reason) {
+        if (!state.exposure) return;
+        const dwellMs = Date.now() - state.exposure.startedAt;
+        const watchedPercent = state.watchPercent[state.exposure.videoId] || 0;
+        recordEvent(state.exposure.videoId, 'video_exit', reason, {
+          dwellMs,
+          watchedPercent,
+          surface: state.mode
+        });
+        if (watchedPercent < 20 && dwellMs < 5000) {
+          recordEvent(state.exposure.videoId, 'skip', reason, {
+            dwellMs,
+            watchedPercent,
+            quick: true,
+            surface: state.mode
+          });
+        }
+        state.exposure = null;
+      }
+
+      function startInitialExposure() {
+        if (!state.activeId) return;
+        state.exposure = { videoId: state.activeId, startedAt: Date.now() };
+        recordEvent(state.activeId, 'video_enter', 'initial', { surface: state.mode });
+      }
+
+      function resumeExposure(reason) {
+        if (!state.activeId || state.exposure) return;
+        state.exposure = { videoId: state.activeId, startedAt: Date.now() };
+        recordEvent(state.activeId, 'focus_change', reason, { surface: state.mode });
+      }
+
+      function updatePlayback() {
+        document.querySelectorAll('video[data-video]').forEach((video) => {
+          video.muted = state.muted;
+          if (video.dataset.videoId === state.activeId) {
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+          }
+        });
+      }
+
+      function toggleLike(videoId) {
+        if (!videoId) return;
+        state.likes[videoId] = !state.likes[videoId];
+        localStorage.setItem(LIKES_KEY, JSON.stringify(state.likes));
+        recordEvent(videoId, 'like', state.likes[videoId] ? 'on' : 'off', { surface: state.mode });
+
+        const item = state.items.find((candidate) => candidate.id === videoId);
+        if (item?.studyRole === 'seed' && state.likes[videoId] && unlockGeneratedSet(videoId, 'like')) {
+          return;
+        }
+
+        refreshReelControls();
+        renderAdmin();
+      }
+
+      function unlockGeneratedSet(seedId, reason) {
+        const seed = state.items.find((item) => item.id === seedId && item.studyRole === 'seed');
+        if (!seed || state.study.phase === 'variants') return false;
+
+        const variants = getStudyVariants(seed);
+        if (!variants.length) return false;
+
+        flushExposure(`unlock_${reason}`);
+        state.study.phase = 'variants';
+        state.study.seedId = seed.id;
+        state.study.studySetId = seed.studySetId;
+        saveStudyState();
+
+        state.queue = buildStudyQueue();
+        state.activeId = state.queue[0]?.id || null;
+        recordEvent(seed.id, 'study_set_unlocked', reason, {
+          studySetId: seed.studySetId,
+          variantCount: variants.length,
+          unlockThreshold: reason === 'watch' ? WATCH_UNLOCK_PERCENT : undefined
+        });
+
+        renderReelFeed();
+        setupReelObserver();
+        reelFeed.scrollTo({ top: 0, behavior: 'smooth' });
+        startInitialExposure();
+        updatePlayback();
+        renderAdmin();
+        setStatus('Generated versions unlocked.');
+        return true;
+      }
+
+      function chooseVariant(videoId) {
+        const item = state.items.find((candidate) => candidate.id === videoId);
+        if (!item || item.studyRole !== 'variant') return;
+
+        state.study.selectedVariantId = videoId;
+        saveStudyState();
+        recordEvent(videoId, 'variant_choice', 'best', {
+          seedId: item.seedId,
+          studySetId: item.studySetId,
+          modelName: item.modelName || item.title
+        });
+        refreshReelControls();
+        renderAdmin();
+      }
+
+      function chooseKeyword(videoId, keyword) {
+        const item = state.items.find((candidate) => candidate.id === videoId);
+        if (!item || !keyword) return;
+
+        state.study.keywordChoices[videoId] = keyword;
+        saveStudyState();
+        recordEvent(videoId, 'keyword_choice', keyword, {
+          seedId: item.seedId,
+          studySetId: item.studySetId,
+          modelName: item.modelName || item.title,
+          keywordSource: 'pipeline_extracted_keywords'
+        });
+        refreshReelControls();
+        renderAdmin();
+      }
+
+      function refreshReelControls() {
+        reelFeed.querySelectorAll('[data-like]').forEach((button) => {
+          const videoId = button.getAttribute('data-like');
+          const isActive = Boolean(state.likes[videoId]);
+          button.classList.toggle('active', isActive);
+          button.textContent = isActive ? 'Liked' : 'Like';
+        });
+
+        reelFeed.querySelectorAll('[data-best]').forEach((button) => {
+          button.classList.toggle('active', button.getAttribute('data-best') === state.study.selectedVariantId);
+        });
+
+        reelFeed.querySelectorAll('[data-keyword-video]').forEach((button) => {
+          const videoId = button.getAttribute('data-keyword-video');
+          const keyword = button.getAttribute('data-keyword');
+          button.classList.toggle('active', state.study.keywordChoices[videoId] === keyword);
+        });
+      }
+
+      function toggleMute() {
+        state.muted = !state.muted;
+        recordEvent(state.activeId || 'page', 'mute_toggle', state.muted ? 'muted' : 'audio', { surface: state.mode });
+        document.querySelectorAll('[data-mute]').forEach((button) => {
+          button.textContent = state.muted ? 'Muted' : 'Audio';
+        });
+        updatePlayback();
+      }
+
+      function trackProgress(videoId, percent) {
+        state.watchPercent[videoId] = Math.max(state.watchPercent[videoId] || 0, percent);
+        const item = state.items.find((candidate) => candidate.id === videoId);
+        if (item?.studyRole === 'seed' && percent >= WATCH_UNLOCK_PERCENT) {
+          unlockGeneratedSet(videoId, 'watch');
+        }
+        if (!state.milestones[videoId]) state.milestones[videoId] = new Set();
+        [10, 25, 50, 75, 95, 100].forEach((milestone) => {
+          if (percent >= milestone && !state.milestones[videoId].has(milestone)) {
+            state.milestones[videoId].add(milestone);
+            recordEvent(videoId, milestone === 100 ? 'complete' : 'progress', String(milestone), {
+              milestone,
+              surface: state.mode
+            });
+          }
+        });
+      }
+
+      function recordEvent(videoId, event, value, metadata) {
+        const context = getEventContext(videoId);
+        const entry = {
+          id: createId('event'),
+          sequence: eventSequence += 1,
+          videoId,
+          sessionId: state.sessionId,
+          participantId: state.participantId,
+          studyLabel: state.studyLabel,
+          event,
+          value: value || undefined,
+          metadata: { ...context, ...(metadata || {}) },
+          createdAt: new Date().toISOString()
+        };
+        state.events.push(entry);
+        localStorage.setItem(EVENTS_KEY, JSON.stringify(state.events));
+        queueAutoSave(entry);
+      }
+
+      function queueAutoSave(entry) {
+        state.unsentEvents.push(entry);
+        localStorage.setItem(UNSENT_EVENTS_KEY, JSON.stringify(state.unsentEvents));
+        scheduleAutoSave();
+      }
+
+      function scheduleAutoSave(delay = 750) {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => flushAutoSave(), delay);
+      }
+
+      async function flushAutoSave(options = {}) {
+        if (!state.unsentEvents.length || autoSaveInFlight) return;
+
+        const batch = state.unsentEvents.slice(0, AUTO_SAVE_BATCH_SIZE);
+        const target = getAutoSaveTarget();
+        if (target.type === 'disabled') {
+          if (adminPanel.classList.contains('open')) renderAdmin();
+          return;
+        }
+        const payload = JSON.stringify({
+          participantId: state.participantId,
+          studyLabel: state.studyLabel,
+          sessionId: state.sessionId,
+          events: batch
+        });
+
+        if (options.beacon && target.type === 'endpoint' && navigator.sendBeacon) {
+          navigator.sendBeacon(target.endpoint, new Blob([payload], { type: 'application/json' }));
+          return;
+        }
+
+        autoSaveInFlight = true;
+        try {
+          if (target.type === 'supabase') {
+            await postSupabaseEvents(batch, target);
+          } else {
+            const response = await fetch(target.endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload,
+              keepalive: Boolean(options.keepalive)
+            });
+            if (!response.ok) throw new Error('Auto-save failed');
+          }
+          markAutoSaved(batch);
+          if (state.unsentEvents.length) scheduleAutoSave(120);
+        } catch {
+          scheduleAutoSave(3000);
+        } finally {
+          autoSaveInFlight = false;
+          if (adminPanel.classList.contains('open')) renderAdmin();
+        }
+      }
+
+      function markAutoSaved(batch) {
+        const savedIds = new Set(batch.map((event) => event.id));
+        state.unsentEvents = state.unsentEvents.filter((event) => !savedIds.has(event.id));
+        localStorage.setItem(UNSENT_EVENTS_KEY, JSON.stringify(state.unsentEvents));
+      }
+
+      function getAutoSaveTarget() {
+        if (CLOUD_ANALYTICS.supabaseUrl && CLOUD_ANALYTICS.supabaseAnonKey) {
+          return {
+            type: 'supabase',
+            url: CLOUD_ANALYTICS.supabaseUrl.replace(/\/$/, ''),
+            key: CLOUD_ANALYTICS.supabaseAnonKey,
+            table: CLOUD_ANALYTICS.supabaseTable || 'video_events'
+          };
+        }
+        if (AUTO_SAVE_ENDPOINT) {
+          return { type: 'endpoint', endpoint: AUTO_SAVE_ENDPOINT };
+        }
+        return { type: 'disabled' };
+      }
+
+      async function postSupabaseEvents(batch, target) {
+        const rows = batch.map((event) => ({
+          id: event.id,
+          video_id: event.videoId,
+          session_id: event.sessionId,
+          event_type: event.event,
+          event_value: event.value || null,
+          metadata: {
+            ...(event.metadata || {}),
+            participantId: event.participantId,
+            studyLabel: event.studyLabel,
+            sequence: event.sequence
+          },
+          created_at: event.createdAt
+        }));
+
+        const response = await fetch(`${target.url}/rest/v1/${encodeURIComponent(target.table)}`, {
+          method: 'POST',
+          headers: {
+            apikey: target.key,
+            Authorization: `Bearer ${target.key}`,
+            'Content-Type': 'application/json',
+            Prefer: 'resolution=ignore-duplicates'
+          },
+          body: JSON.stringify(rows)
+        });
+
+        if (!response.ok) {
+          throw new Error('Supabase auto-save failed');
+        }
+      }
+
+      function getEventContext(videoId) {
+        const item = state.items.find((candidate) => candidate.id === videoId);
+        const queuePosition = state.queue.findIndex((candidate) => candidate.id === videoId);
+        return {
+          surface: state.mode,
+          queuePosition: queuePosition >= 0 ? queuePosition + 1 : undefined,
+          videoTitle: item?.title,
+          category: item?.category,
+          sourceLabel: item?.sourceLabel,
+          studyPhase: state.study.phase,
+          studySetId: item?.studySetId || state.study.studySetId,
+          studyRole: item?.studyRole,
+          seedId: item?.seedId || (item?.studyRole === 'seed' ? item.id : state.study.seedId),
+          modelName: item?.modelName,
+          variantOrder: item?.variantOrder,
+          outputFolder: item?.outputFolder,
+          selectedVariantId: state.study.selectedVariantId || undefined,
+          keywordChoice: item ? state.study.keywordChoices[item.id] : undefined
+        };
+      }
+
+      function renderAdmin() {
+        const report = buildLocalReport();
+        const hostedDropboxCount = state.items.filter((item) =>
+          item.source?.kind === 'url' && (item.source.provider === 'dropbox' || item.sourceLabel === 'dropbox')
+        ).length;
+        adminSummary.innerHTML = `
+          <div class="admin-stat"><span>Participant</span><strong>${escapeHtml(state.participantId)}</strong></div>
+          <div class="admin-stat"><span>Study label</span><strong>${escapeHtml(state.studyLabel)}</strong></div>
+          <div class="admin-stat"><span>Session</span><strong>${escapeHtml(state.sessionId.slice(0, 12))}</strong></div>
+          <div class="admin-stat"><span>Study phase</span><strong>${escapeHtml(state.study.phase)}</strong></div>
+          <div class="admin-stat"><span>Selected variant</span><strong>${escapeHtml(state.study.selectedVariantId || 'none')}</strong></div>
+          <div class="admin-stat"><span>Keyword picks</span><strong>${Object.keys(state.study.keywordChoices).length}</strong></div>
+          <div class="admin-stat"><span>Videos loaded</span><strong>${state.queue.length}</strong></div>
+          <div class="admin-stat"><span>Hosted Dropbox videos</span><strong>${hostedDropboxCount}</strong></div>
+          <div class="admin-stat"><span>Auto-save pending</span><strong>${state.unsentEvents.length}</strong></div>
+          <div class="admin-stat"><span>Quick-add links</span><strong>${state.customDropboxItems.length}</strong></div>
+          <div class="admin-stat"><span>Total local events</span><strong>${report.totalEvents}</strong></div>
+          <div class="admin-stat"><span>Impressions</span><strong>${report.impressions}</strong></div>
+          <div class="admin-stat"><span>Likes</span><strong>${report.likes}</strong></div>
+          <div class="admin-stat"><span>Quick skips</span><strong>${report.skips}</strong></div>
+          <div class="admin-stat"><span>Full watches</span><strong>${report.completes}</strong></div>
+        `;
+
+        topVideos.innerHTML = `
+          <strong>Top videos</strong>
+          ${report.byVideo.slice(0, 8).map((video) => `
+            <div class="admin-stat">
+              <span>${escapeHtml(video.title)}</span>
+              <strong>${video.score.toFixed(1)}</strong>
+            </div>
+          `).join('') || '<p>No watch data yet.</p>'}
+        `;
+      }
+
+      function buildLocalReport() {
+        const itemLookup = new Map(state.items.map((item) => [item.id, item]));
+        const byVideo = new Map();
+        let impressions = 0;
+        let likes = 0;
+        let completes = 0;
+        let skips = 0;
+
+        state.events.forEach((event) => {
+          const item = itemLookup.get(event.videoId);
+          if (!item) return;
+          if (!byVideo.has(event.videoId)) {
+            byVideo.set(event.videoId, {
+              videoId: event.videoId,
+              title: item.title || event.videoId,
+              category: item.category || '',
+              sourceLabel: item.sourceLabel || '',
+              impressions: 0,
+              likes: 0,
+              completes: 0,
+              skips: 0,
+              dwellMs: 0,
+              exits: 0,
+              maxWatchPercent: 0,
+              score: 0
+            });
+          }
+
+          const current = byVideo.get(event.videoId);
+          if (event.event === 'impression') {
+            current.impressions += 1;
+            impressions += 1;
+          }
+          if (event.event === 'like' && event.value === 'on') {
+            current.likes += 1;
+            likes += 1;
+          }
+          if (event.event === 'complete') {
+            current.completes += 1;
+            completes += 1;
+          }
+          if (event.event === 'skip') {
+            current.skips += 1;
+            skips += 1;
+          }
+          if (event.event === 'progress') {
+            current.maxWatchPercent = Math.max(current.maxWatchPercent, Number(event.value || 0));
+          }
+          if (event.event === 'video_exit') {
+            current.exits += 1;
+            current.dwellMs += Number(event.metadata?.dwellMs || 0);
+            current.maxWatchPercent = Math.max(current.maxWatchPercent, Number(event.metadata?.watchedPercent || 0));
+          }
+        });
+
+        const ranked = [...byVideo.values()].map((video) => {
+          const avgDwell = video.exits ? video.dwellMs / video.exits : 0;
+          return {
+            ...video,
+            avgDwellMs: avgDwell,
+            score: video.likes * 20 + video.completes * 15 + Math.min(40, avgDwell / 1000) + video.impressions * 2
+          };
+        }).sort((left, right) => right.score - left.score);
+
+        return {
+          totalEvents: state.events.length,
+          impressions,
+          likes,
+          skips,
+          completes,
+          byVideo: ranked
+        };
+      }
+
+      function saveResearchSetup() {
+        state.participantId = participantCodeInput.value.trim() || createParticipantId();
+        state.studyLabel = studyLabelInput.value.trim() || 'pilot';
+        participantCodeInput.value = state.participantId;
+        studyLabelInput.value = state.studyLabel;
+        localStorage.setItem(PARTICIPANT_KEY, state.participantId);
+        localStorage.setItem(STUDY_LABEL_KEY, state.studyLabel);
+        recordEvent('session', 'research_setup_saved', '', { surface: 'research_panel' });
+        renderAdmin();
+        setStatus('Research setup saved.');
+      }
+
+      function startNewParticipant() {
+        if (!confirm('Start a new participant and clear local events/likes? Export current data first if you need it.')) return;
+        flushExposure('new_participant');
+        state.participantId = createParticipantId();
+        participantCodeInput.value = state.participantId;
+        localStorage.setItem(PARTICIPANT_KEY, state.participantId);
+        resetLocalResearchState({ newSession: true });
+        rebuildLibrary();
+        renderReelFeed();
+        setupReelObserver();
+        startInitialExposure();
+        updatePlayback();
+        recordEvent('session', 'session_start', 'new_participant', {
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          language: navigator.language
+        });
+        renderAdmin();
+        setStatus('New participant started. Local events and likes were reset.');
+      }
+
+      function applyUrlSetup() {
+        const params = new URLSearchParams(window.location.search);
+        const participant = params.get('participant') || params.get('participantId');
+        const study = params.get('study') || params.get('studyLabel');
+        const shouldFreshStart = isTruthyParam(params.get('fresh')) || isTruthyParam(params.get('reset'));
+
+        if (participant) {
+          state.participantId = participant === 'auto' ? createParticipantId() : participant.trim();
+          localStorage.setItem(PARTICIPANT_KEY, state.participantId);
+        }
+
+        if (study) {
+          state.studyLabel = study.trim() || state.studyLabel;
+          localStorage.setItem(STUDY_LABEL_KEY, state.studyLabel);
+        }
+
+        if (shouldFreshStart) {
+          resetLocalResearchState({ newSession: true });
+        }
+      }
+
+      function isResearchAdminEnabled() {
+        const params = new URLSearchParams(window.location.search);
+        return isTruthyParam(params.get('admin')) || isTruthyParam(params.get('research'));
+      }
+
+      function resetLocalResearchState(options = {}) {
+        if (options.newSession) {
+          state.sessionId = createId('session');
+          localStorage.setItem(SESSION_KEY, state.sessionId);
+        }
+        state.events = [];
+        state.unsentEvents = [];
+        state.likes = {};
+        state.watchPercent = {};
+        state.milestones = {};
+        state.impressions.clear();
+        state.exposure = null;
+        state.activeId = null;
+        state.study = normalizeStudyState({});
+        eventSequence = 0;
+        sessionStartedAt = Date.now();
+        localStorage.setItem(EVENTS_KEY, JSON.stringify(state.events));
+        localStorage.setItem(UNSENT_EVENTS_KEY, JSON.stringify(state.unsentEvents));
+        localStorage.removeItem(LIKES_KEY);
+        saveStudyState();
+      }
+
+      function addDropboxVideo() {
+        const videoUrl = dropboxVideoUrlInput.value.trim();
+        const posterUrl = dropboxPosterUrlInput.value.trim();
+        const title = dropboxTitleInput.value.trim() || `Dropbox video ${state.customDropboxItems.length + 1}`;
+
+        if (!videoUrl) {
+          setStatus('Paste a Dropbox video link first.');
+          dropboxVideoUrlInput.focus();
+          return;
+        }
+
+        const id = `dropbox-${seededHash(videoUrl).toString(36)}`;
+        const existingIndex = state.customDropboxItems.findIndex((item) => item.id === id);
+        const nextItem = {
+          id,
+          title,
+          summary: 'Added from the standalone research feed.',
+          category: 'Dropbox',
+          tags: ['dropbox', 'shared-link'],
+          published: true,
+          studyEligible: true,
+          importSource: 'dropbox',
+          source: {
+            kind: 'url',
+            provider: 'dropbox',
+            url: videoUrl
+          }
+        };
+
+        if (posterUrl) {
+          nextItem.poster = {
+            kind: 'url',
+            provider: posterUrl.includes('dropbox.com') ? 'dropbox' : 'url',
+            url: posterUrl
+          };
+        }
+
+        if (existingIndex >= 0) {
+          state.customDropboxItems[existingIndex] = nextItem;
+        } else {
+          state.customDropboxItems.push(nextItem);
+        }
+
+        localStorage.setItem(CUSTOM_DROPBOX_KEY, JSON.stringify(state.customDropboxItems));
+        recordEvent(id, existingIndex >= 0 ? 'dropbox_update' : 'dropbox_add', 'shared_link', { surface: 'research_panel' });
+
+        dropboxTitleInput.value = '';
+        dropboxVideoUrlInput.value = '';
+        dropboxPosterUrlInput.value = '';
+
+        refreshLibrary(id);
+        setStatus(existingIndex >= 0 ? 'Dropbox video updated.' : 'Dropbox video added to the feed.');
+      }
+
+      function clearDropboxVideos() {
+        if (!state.customDropboxItems.length) {
+          setStatus('No Dropbox links have been added in this browser.');
+          return;
+        }
+        if (!confirm('Remove Dropbox videos saved in this browser? Analytics events will stay.')) return;
+        state.customDropboxItems = [];
+        localStorage.removeItem(CUSTOM_DROPBOX_KEY);
+        refreshLibrary();
+        setStatus('Dropbox links removed from this browser.');
+      }
+
+      function buildRandomQueue(items, limit) {
+        return [...items]
+          .sort((left, right) => {
+            return seededHash(`${state.sessionId}:${left.id}`) - seededHash(`${state.sessionId}:${right.id}`);
+          })
+          .slice(0, limit);
+      }
+
+      function exportJson() {
+        downloadFile(`ag-video-events-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(state.events, null, 2), 'application/json');
+      }
+
+      function exportCsv() {
+        const headers = ['id', 'sequence', 'participantId', 'studyLabel', 'videoId', 'sessionId', 'event', 'value', 'createdAt', 'metadata'];
+        const rows = state.events.map((event) =>
+          headers.map((header) => csvCell(header === 'metadata' ? JSON.stringify(event.metadata || {}) : event[header] || '')).join(',')
+        );
+        downloadFile(`ag-video-events-${new Date().toISOString().slice(0, 10)}.csv`, [headers.join(','), ...rows].join('\n'), 'text/csv');
+      }
+
+      function exportSummaryCsv() {
+        const headers = [
+          'participantId',
+          'studyLabel',
+          'videoId',
+          'title',
+          'category',
+          'sourceLabel',
+          'impressions',
+          'likes',
+          'skips',
+          'completes',
+          'exits',
+          'avgDwellMs',
+          'maxWatchPercent',
+          'score'
+        ];
+        const rows = buildLocalReport().byVideo.map((video) =>
+          headers.map((header) => {
+            if (header === 'participantId') return csvCell(state.participantId);
+            if (header === 'studyLabel') return csvCell(state.studyLabel);
+            return csvCell(video[header] ?? '');
+          }).join(',')
+        );
+        downloadFile(`ag-video-summary-${new Date().toISOString().slice(0, 10)}.csv`, [headers.join(','), ...rows].join('\n'), 'text/csv');
+      }
+
+      function downloadFile(filename, content, type) {
+        const blob = new Blob([content], { type });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function csvCell(value) {
+        return `"${String(value).replaceAll('"', '""')}"`;
+      }
+
+      function clearLocalData() {
+        if (!confirm('Clear local analytics and likes for this browser?')) return;
+        resetLocalResearchState();
+        rebuildLibrary();
+        renderReelFeed();
+        setupReelObserver();
+        startInitialExposure();
+        updatePlayback();
+        renderAdmin();
+      }
+
+      function getSessionId() {
+        const existing = localStorage.getItem(SESSION_KEY);
+        if (existing) return existing;
+        const next = createId('session');
+        localStorage.setItem(SESSION_KEY, next);
+        return next;
+      }
+
+      function getParticipantId() {
+        const existing = localStorage.getItem(PARTICIPANT_KEY);
+        if (existing) return existing;
+        const next = createParticipantId();
+        localStorage.setItem(PARTICIPANT_KEY, next);
+        return next;
+      }
+
+      function loadJson(key, fallback) {
+        try {
+          return JSON.parse(localStorage.getItem(key) || '') || fallback;
+        } catch {
+          return fallback;
+        }
+      }
+
+      function normalizeStudyState(value) {
+        const study = value && typeof value === 'object' ? value : {};
+        return {
+          phase: study.phase === 'variants' ? 'variants' : 'seed',
+          studySetId: study.studySetId || null,
+          seedId: study.seedId || null,
+          selectedVariantId: study.selectedVariantId || null,
+          keywordChoices: study.keywordChoices && typeof study.keywordChoices === 'object'
+            ? study.keywordChoices
+            : {}
+        };
+      }
+
+      function saveStudyState() {
+        localStorage.setItem(STUDY_STATE_KEY, JSON.stringify(state.study));
+      }
+
+      function setStatus(message) {
+        statusBox.textContent = message;
+        clearTimeout(setStatus.timer);
+        setStatus.timer = setTimeout(() => statusBox.classList.add('hidden'), 4000);
+        statusBox.classList.remove('hidden');
+      }
+
+      function seededHash(value) {
+        let hash = 2166136261;
+        for (let index = 0; index < value.length; index += 1) {
+          hash ^= value.charCodeAt(index);
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+      }
+
+      function slugId(value) {
+        const slug = String(value || '')
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+
+        return slug || `video-${seededHash(String(value || Date.now())).toString(36)}`;
+      }
+
+      function createParticipantId() {
+        return `participant-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+      }
+
+      function createId(prefix) {
+        const randomId = window.crypto?.randomUUID
+          ? window.crypto.randomUUID()
+          : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+        return prefix ? `${prefix}-${randomId}` : randomId;
+      }
+
+      function isTruthyParam(value) {
+        return ['1', 'true', 'yes', 'new'].includes(String(value || '').toLowerCase());
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#039;');
+      }
+
+      function escapeAttr(value) {
+        return escapeHtml(value || '');
+      }
+
+      function cssEscape(value) {
+        if (window.CSS && CSS.escape) return CSS.escape(value || '');
+        return String(value || '').replace(/"/g, '\\"');
+      }
+    </script>
+  </body>
+</html>
