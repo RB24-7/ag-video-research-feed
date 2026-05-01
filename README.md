@@ -56,10 +56,18 @@ The builder will:
 
 - List every MP4 in `original-ads/`.
 - Create or reuse Dropbox shared links for the original videos.
-- Match each original ad to its folder in `generated-outputs/`.
+- Recursively scan `generated-outputs/` for folders that contain `new_ad_*.mp4` files.
+- Match each original ad to its generated-output folder.
 - Add all `new_ad_*.mp4` generated variants.
 - Try to pull keywords from `final_keywords.csv`, `mining_summary.csv`, or `merged_keywords.csv`.
 - Write `data/video-manifest.json`.
+- Warn about original ads without generated videos and generated folders that did not match an original ad.
+
+For troubleshooting folder-name mismatches, run:
+
+```bash
+node scripts/build-dropbox-manifest.mjs --debug
+```
 
 The Dropbox token stays on the server. Never paste it into `research-feed.html` or commit it to git.
 

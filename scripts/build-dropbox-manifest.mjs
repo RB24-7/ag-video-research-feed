@@ -38,22 +38,24 @@ if (!accessToken) {
 const originalRoot = makeDropboxRoot(originalsFolder);
 const generatedRoot = makeDropboxRoot(generatedFolder);
 
+const debug = args.debug === 'true' || args.verbose === 'true';
+
 const originalFiles = (await listDropboxFolder(originalRoot))
   .filter((entry) => entry['.tag'] === 'file' && isVideoFile(entry.name))
   .sort((left, right) => left.name.localeCompare(right.name));
-const generatedFolders = (await listDropboxFolder(generatedRoot))
-  .filter((entry) => entry['.tag'] === 'folder')
+const generatedEntries = await listDropboxFolder(generatedRoot, { recursive: true });
+const generatedFolders = groupEntriesByParentFolder(generatedEntries)
+  .filter((folder) => folder.entries.some((entry) => entry['.tag'] === 'file' && isGeneratedVideoFile(entry.name)))
   .sort((left, right) => left.name.localeCompare(right.name));
 const generatedBySetId = new Map();
 
 for (const folder of generatedFolders) {
   const setId = slugId(folder.name);
-  const folderRef = childDropboxRef(generatedRoot, folder.name, folder);
-  const entries = await listDropboxFolder(folderRef);
-  const videoFiles = entries
-    .filter((entry) => entry['.tag'] === 'file' && isVideoFile(entry.name) && entry.name.startsWith('new_ad_'))
+  const folderRef = folder.ref || childDropboxRef(generatedRoot, folder.name, folder);
+  const videoFiles = folder.entries
+    .filter((entry) => entry['.tag'] === 'file' && isGeneratedVideoFile(entry.name))
     .sort((left, right) => modelSortKey(left.name) - modelSortKey(right.name));
-  const keywords = await readKeywords(entries, folderRef);
+  const keywords = await readKeywords(folder.entries, folderRef);
 
   generatedBySetId.set(setId, {
     setId,
@@ -77,9 +79,11 @@ for (const folder of generatedFolders) {
   });
 }
 
+const matchedGeneratedIds = new Set();
 const sets = await Promise.all(originalFiles.map(async (file) => {
   const setId = slugId(stripExtension(file.name));
-  const generated = generatedBySetId.get(setId);
+  const generated = findGeneratedMatch(setId, generatedBySetId);
+  if (generated) matchedGeneratedIds.add(generated.setId);
   const keywords = uniqueList([
     ...(generated?.keywords || []),
     ...keywordsFromTitle(stripExtension(file.name))
@@ -117,7 +121,33 @@ await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);
 const variantCount = sets.reduce((total, set) => total + set.variants.length, 0);
 console.log(`Wrote ${outputPath}`);
 console.log(`Original ads: ${sets.length}`);
+console.log(`Generated output folders scanned: ${generatedBySetId.size}`);
 console.log(`Generated videos: ${variantCount}`);
+
+const originalsWithoutGenerated = sets.filter((set) => set.variants.length === 0);
+const unmatchedGenerated = [...generatedBySetId.values()]
+  .filter((folder) => !matchedGeneratedIds.has(folder.setId));
+
+if (originalsWithoutGenerated.length) {
+  console.warn(`Original ads without matched generated videos: ${originalsWithoutGenerated.length}`);
+  for (const set of originalsWithoutGenerated.slice(0, 20)) {
+    console.warn(`  - ${set.seed.fileName} -> expected folder id "${set.id}"`);
+  }
+}
+
+if (unmatchedGenerated.length) {
+  console.warn(`Generated folders not matched to an original ad: ${unmatchedGenerated.length}`);
+  for (const folder of unmatchedGenerated.slice(0, 20)) {
+    console.warn(`  - ${folder.title} -> folder id "${folder.setId}", videos ${folder.variants.length}`);
+  }
+}
+
+if (debug) {
+  console.log('Original ids:');
+  for (const file of originalFiles) console.log(`  - ${slugId(stripExtension(file.name))} (${file.name})`);
+  console.log('Generated folder ids:');
+  for (const folder of generatedBySetId.values()) console.log(`  - ${folder.setId} (${folder.variants.length} videos)`);
+}
 
 function env(name) {
   return process.env[name]?.trim();
@@ -205,11 +235,11 @@ function childDropboxRef(root, childName, entry) {
   };
 }
 
-async function listDropboxFolder(ref) {
+async function listDropboxFolder(ref, options = {}) {
   const firstPage = await dropboxRpc('https://api.dropboxapi.com/2/files/list_folder', {
     path: ref.kind === 'shared_link' ? ref.relativePath || '' : ref.path,
     shared_link: ref.kind === 'shared_link' ? { url: ref.shareUrl } : undefined,
-    recursive: false,
+    recursive: Boolean(options.recursive),
     include_deleted: false,
     include_non_downloadable_files: false
   });
@@ -334,6 +364,10 @@ function isVideoFile(fileName) {
   return /\.mp4$/i.test(fileName);
 }
 
+function isGeneratedVideoFile(fileName) {
+  return isVideoFile(fileName) && /^new_ad_/i.test(fileName);
+}
+
 function stripExtension(fileName) {
   return fileName.replace(/\.[^.]+$/, '');
 }
@@ -377,6 +411,49 @@ function keywordsFromTitle(title) {
 
 function uniqueList(values) {
   return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
+}
+
+function groupEntriesByParentFolder(entries) {
+  const grouped = new Map();
+
+  for (const entry of entries) {
+    if (entry['.tag'] !== 'file') continue;
+    const parentPath = parentDropboxPath(entry);
+    const folderName = parentPath.split('/').filter(Boolean).at(-1) || 'generated-outputs';
+    if (!grouped.has(parentPath)) {
+      grouped.set(parentPath, {
+        name: folderName,
+        ref: {
+          kind: 'path',
+          path: parentPath
+        },
+        entries: []
+      });
+    }
+    grouped.get(parentPath).entries.push(entry);
+  }
+
+  return [...grouped.values()];
+}
+
+function parentDropboxPath(entry) {
+  const entryPath = entry.path_lower || entry.path_display || `/${entry.name}`;
+  const parts = entryPath.split('/').filter(Boolean);
+  parts.pop();
+  return `/${parts.join('/')}`;
+}
+
+function findGeneratedMatch(originalId, generatedBySetId) {
+  if (generatedBySetId.has(originalId)) return generatedBySetId.get(originalId);
+
+  const fuzzyMatches = [...generatedBySetId.entries()]
+    .filter(([generatedId]) =>
+      generatedId.length >= 6 &&
+      originalId.length >= 6 &&
+      (generatedId.includes(originalId) || originalId.includes(generatedId))
+    );
+
+  return fuzzyMatches.length === 1 ? fuzzyMatches[0][1] : undefined;
 }
 
 function joinDropboxPath(parent, child) {
