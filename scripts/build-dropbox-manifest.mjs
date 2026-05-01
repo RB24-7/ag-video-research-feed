@@ -43,9 +43,7 @@ const debug = args.debug === 'true' || args.verbose === 'true';
 const originalFiles = (await listDropboxFolder(originalRoot))
   .filter((entry) => entry['.tag'] === 'file' && isVideoFile(entry.name))
   .sort((left, right) => left.name.localeCompare(right.name));
-const generatedEntries = await listDropboxFolder(generatedRoot, { recursive: true });
-const generatedFolders = groupEntriesByParentFolder(generatedEntries)
-  .filter((folder) => folder.entries.some((entry) => entry['.tag'] === 'file' && isGeneratedVideoFile(entry.name)))
+const generatedFolders = (await discoverGeneratedFolders(generatedRoot))
   .sort((left, right) => left.name.localeCompare(right.name));
 const generatedBySetId = new Map();
 
@@ -239,7 +237,7 @@ async function listDropboxFolder(ref, options = {}) {
   const firstPage = await dropboxRpc('https://api.dropboxapi.com/2/files/list_folder', {
     path: ref.kind === 'shared_link' ? ref.relativePath || '' : ref.path,
     shared_link: ref.kind === 'shared_link' ? { url: ref.shareUrl } : undefined,
-    recursive: Boolean(options.recursive),
+    recursive: ref.kind === 'shared_link' ? false : Boolean(options.recursive),
     include_deleted: false,
     include_non_downloadable_files: false
   });
@@ -256,6 +254,36 @@ async function listDropboxFolder(ref, options = {}) {
   }
 
   return entries;
+}
+
+async function discoverGeneratedFolders(root) {
+  const folders = [];
+
+  async function visit(folderRef, folderName) {
+    const entries = await listDropboxFolder(folderRef);
+    const hasGeneratedVideos = entries.some((entry) =>
+      entry['.tag'] === 'file' && isGeneratedVideoFile(entry.name)
+    );
+
+    if (hasGeneratedVideos) {
+      folders.push({
+        name: folderName,
+        ref: folderRef,
+        entries
+      });
+    }
+
+    const childFolders = entries
+      .filter((entry) => entry['.tag'] === 'folder')
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    for (const child of childFolders) {
+      await visit(childDropboxRef(folderRef, child.name, child), child.name);
+    }
+  }
+
+  await visit(root, 'generated-outputs');
+  return folders;
 }
 
 async function dropboxRpc(url, body) {
@@ -411,36 +439,6 @@ function keywordsFromTitle(title) {
 
 function uniqueList(values) {
   return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
-}
-
-function groupEntriesByParentFolder(entries) {
-  const grouped = new Map();
-
-  for (const entry of entries) {
-    if (entry['.tag'] !== 'file') continue;
-    const parentPath = parentDropboxPath(entry);
-    const folderName = parentPath.split('/').filter(Boolean).at(-1) || 'generated-outputs';
-    if (!grouped.has(parentPath)) {
-      grouped.set(parentPath, {
-        name: folderName,
-        ref: {
-          kind: 'path',
-          path: parentPath
-        },
-        entries: []
-      });
-    }
-    grouped.get(parentPath).entries.push(entry);
-  }
-
-  return [...grouped.values()];
-}
-
-function parentDropboxPath(entry) {
-  const entryPath = entry.path_lower || entry.path_display || `/${entry.name}`;
-  const parts = entryPath.split('/').filter(Boolean);
-  parts.pop();
-  return `/${parts.join('/')}`;
 }
 
 function findGeneratedMatch(originalId, generatedBySetId) {
