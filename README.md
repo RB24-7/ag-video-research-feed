@@ -57,11 +57,11 @@ The builder will:
 - List every MP4 in `original-ads/`.
 - Create or reuse Dropbox shared links for the original videos.
 - Recursively scan `generated-outputs/` for folders that contain `new_ad_*.mp4` files.
-- Match each original ad to its generated-output folder.
+- Match each original ad to its generated-output folder, including cleaner folder names that share the same key words.
 - Add all `new_ad_*.mp4` generated variants.
 - Try to pull keywords from `final_keywords.csv`, `mining_summary.csv`, or `merged_keywords.csv`.
 - Write `data/video-manifest.json`.
-- Warn about original ads without generated videos and generated folders that did not match an original ad.
+- Report discovered versus matched generated-video counts, then warn about unmatched originals or folders.
 
 For troubleshooting folder-name mismatches, run:
 

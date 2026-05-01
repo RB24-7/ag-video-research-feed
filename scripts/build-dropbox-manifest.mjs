@@ -15,7 +15,9 @@ const MODEL_LABELS = {
 };
 const STOPWORDS = new Set([
   'and', 'the', 'for', 'with', 'from', 'this', 'that', 'video', 'ad', 'commercial',
-  'template', 'editable', 'advertising', 'campaign', 'weekly'
+  'ads', 'template', 'editable', 'advertising', 'campaign', 'weekly', 'animation',
+  'animated', 'about', 'all', 'your', 'you', 'it', 'its', 'order', 'now', 'yours',
+  'days', 'pack'
 ]);
 
 const args = parseArgs(process.argv.slice(2));
@@ -116,11 +118,14 @@ const manifest = {
 await mkdir(path.dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
+const discoveredVariantCount = [...generatedBySetId.values()]
+  .reduce((total, set) => total + set.variants.length, 0);
 const variantCount = sets.reduce((total, set) => total + set.variants.length, 0);
 console.log(`Wrote ${outputPath}`);
 console.log(`Original ads: ${sets.length}`);
 console.log(`Generated output folders scanned: ${generatedBySetId.size}`);
-console.log(`Generated videos: ${variantCount}`);
+console.log(`Generated videos discovered: ${discoveredVariantCount}`);
+console.log(`Generated videos matched: ${variantCount}`);
 
 const originalsWithoutGenerated = sets.filter((set) => set.variants.length === 0);
 const unmatchedGenerated = [...generatedBySetId.values()]
@@ -444,14 +449,68 @@ function uniqueList(values) {
 function findGeneratedMatch(originalId, generatedBySetId) {
   if (generatedBySetId.has(originalId)) return generatedBySetId.get(originalId);
 
-  const fuzzyMatches = [...generatedBySetId.entries()]
-    .filter(([generatedId]) =>
+  const directMatches = [...generatedBySetId.entries()]
+    .filter(([generatedId]) => (
       generatedId.length >= 6 &&
       originalId.length >= 6 &&
       (generatedId.includes(originalId) || originalId.includes(generatedId))
+    ));
+
+  if (directMatches.length === 1) return directMatches[0][1];
+
+  const fuzzyMatches = [...generatedBySetId.entries()]
+    .map(([generatedId, generated]) => ({
+      generated,
+      score: matchScore(originalId, generatedId)
+    }))
+    .filter((candidate) => candidate.score.overlap >= 2 && candidate.score.coverage >= 0.6)
+    .sort((left, right) =>
+      right.score.weighted - left.score.weighted ||
+      right.score.overlap - left.score.overlap
     );
 
-  return fuzzyMatches.length === 1 ? fuzzyMatches[0][1] : undefined;
+  if (!fuzzyMatches.length) return undefined;
+
+  const [best, next] = fuzzyMatches;
+  if (next && Math.abs(best.score.weighted - next.score.weighted) < 0.05) return undefined;
+
+  return best.generated;
+}
+
+function matchScore(originalId, generatedId) {
+  const originalTokens = new Set(matchTokens(originalId));
+  const generatedTokens = matchTokens(generatedId);
+  if (!originalTokens.size || !generatedTokens.length) {
+    return { coverage: 0, jaccard: 0, overlap: 0, weighted: 0 };
+  }
+
+  const overlap = generatedTokens.filter((token) => originalTokens.has(token)).length;
+  const union = new Set([...originalTokens, ...generatedTokens]).size;
+  const coverage = overlap / generatedTokens.length;
+  const jaccard = overlap / union;
+
+  return {
+    coverage,
+    jaccard,
+    overlap,
+    weighted: (coverage * 0.75) + (jaccard * 0.25)
+  };
+}
+
+function matchTokens(value) {
+  return uniqueList(slugId(value)
+    .split('-')
+    .map(normalizeMatchToken)
+    .filter((token) => token.length >= 2)
+    .filter((token) => !/^\d+$/.test(token))
+    .filter((token) => !STOPWORDS.has(token)));
+}
+
+function normalizeMatchToken(token) {
+  if (token.length > 4 && token.endsWith('ies')) return `${token.slice(0, -3)}y`;
+  if (token.length > 4 && token.endsWith('es')) return token.slice(0, -2);
+  if (token.length > 4 && token.endsWith('s')) return token.slice(0, -1);
+  return token;
 }
 
 function joinDropboxPath(parent, child) {
