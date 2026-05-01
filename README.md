@@ -1,57 +1,78 @@
 # Ag Video Research Feed
 
-A TikTok/Reels-style research page for agricultural ad testing. The participant experience is intentionally simple: people open the page, watch randomized vertical videos, like or skip naturally, and answer very quick keyword/variant prompts only after an original ad has enough engagement.
+A TikTok/Reels-style research page for agricultural ad testing. Participants open the page, watch randomized vertical ads, interact naturally, and answer quick keyword/variant prompts only after an original ad gets enough engagement.
 
-The large videos are hosted outside the repo through Dropbox. The repo only stores the page and the lightweight manifest that tells the page what to load.
+Large videos stay in Dropbox. The repo does not hardcode individual video links. Instead, a server-side manifest builder reads Dropbox and writes the JSON that the HTML page loads.
 
 ## Main Files
 
 - `research-feed.html` is the standalone participant page.
-- `data/dropbox-videos.json` is the Dropbox video manifest.
+- `scripts/build-dropbox-manifest.mjs` reads Dropbox and generates `data/video-manifest.json`.
+- `data/video-manifest.json` is generated output and is intentionally ignored by git.
 - `research-feed.html?admin=1` opens the hidden researcher panel for local exports and testing.
-This GitHub version focuses on the standalone Dropbox demo. Older local app/development files are intentionally left out of the repo so the server deployment stays easy to understand.
+
+## Dropbox Structure
+
+Keep Dropbox as the source of truth:
+
+```text
+Ag Video Research/
+  original-ads/
+    apple-season-ad.mp4
+    pistachios-green-nut-ad.mp4
+
+  generated-outputs/
+    apple-season-ad/
+      final_keywords.csv
+      mining_summary.csv
+      new_ad_anythingv5.mp4
+      new_ad_revanimated.mp4
+      new_ad_toonyou.mp4
+      new_ad_dreamshaper.mp4
+      new_ad_sd15.mp4
+      extraction_done.flag
+```
+
+Folder names under `generated-outputs/` should match the original ad filename slug. For example, `Apple Season Ad.mp4` becomes `apple-season-ad/`.
+
+## Build The Manifest
+
+Create a `.env` file on the server:
+
+```bash
+DROPBOX_ACCESS_TOKEN=
+DROPBOX_ORIGINAL_ADS_FOLDER=https://www.dropbox.com/scl/fo/.../original-ads?rlkey=...
+DROPBOX_GENERATED_OUTPUTS_FOLDER=https://www.dropbox.com/scl/fo/.../generated-outputs?rlkey=...
+MANIFEST_OUTPUT=data/video-manifest.json
+```
+
+Then run:
+
+```bash
+node scripts/build-dropbox-manifest.mjs
+```
+
+The builder will:
+
+- List every MP4 in `original-ads/`.
+- Create or reuse Dropbox shared links for the original videos.
+- Match each original ad to its folder in `generated-outputs/`.
+- Add all `new_ad_*.mp4` generated variants.
+- Try to pull keywords from `final_keywords.csv`, `mining_summary.csv`, or `merged_keywords.csv`.
+- Write `data/video-manifest.json`.
+
+The Dropbox token stays on the server. Never paste it into `research-feed.html` or commit it to git.
 
 ## Deploy
 
-For the simple server version, upload these while keeping the same folder structure:
+Upload these files while keeping the same structure:
 
 ```text
 research-feed.html
-data/dropbox-videos.json
+data/video-manifest.json
 ```
 
-Participants only need the URL to `research-feed.html`. The videos stream from Dropbox, so the server does not need to store the large MP4 files.
-
-## Dropbox Manifest
-
-Each item in `sets` represents one original ad and its generated follow-up videos.
-
-```json
-{
-  "sets": [
-    {
-      "id": "apple-season-ad",
-      "title": "Apple Season Ad",
-      "keywords": ["apple", "orchard", "fresh", "california", "harvest"],
-      "seed": {
-        "url": "https://www.dropbox.com/scl/fi/.../Apple%20Season%20Ad.mp4?dl=0",
-        "title": "Original ad"
-      },
-      "variants": [
-        {
-          "url": "https://www.dropbox.com/scl/fi/.../new_ad_dreamshaper.mp4?dl=0",
-          "modelName": "DreamShaper",
-          "shortLabel": "Dream"
-        }
-      ],
-      "outputFolder": "https://www.dropbox.com/scl/fo/..."
-    }
-  ],
-  "videos": []
-}
-```
-
-Use `keywords` for the quick participant keyword prompt. Use `variants` for the generated videos from the notebook pipeline. Use `outputFolder` only to keep the research data aligned with the Dropbox folder; participants do not need to interact with it.
+If Dropbox videos change later, update Dropbox and rerun the manifest builder. The HTML does not need to change.
 
 ## Research Flow
 
@@ -66,7 +87,3 @@ Use `keywords` for the quick participant keyword prompt. Use `variants` for the 
 The standalone page records interaction events in the browser, including impressions, watch time, progress milestones, completions, skips, pauses, likes, mute changes, visibility changes, generated-video unlocks, variant picks, and keyword choices.
 
 Cloud auto-save is intentionally disabled in the checked-in file. If a server endpoint or Supabase setup is added later, keep keys on the server and do not commit secrets to this repo.
-
-## Local Development
-
-The standalone page does not require a build step. Open `research-feed.html` from a server next to the `data/` folder and it will load the Dropbox-hosted videos from `data/dropbox-videos.json`.

@@ -4,6 +4,7 @@ dist/
 
 .env
 .env.*
+!.env.example
 .DS_Store
 *.log
 
@@ -14,6 +15,7 @@ public/
 
 data/analytics-events.json
 data/curation-submissions.json
+data/video-manifest.json
 data/outreach-projects.json
 data/research-server.log
 data/sora-downloads.json
