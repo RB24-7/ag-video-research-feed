@@ -287,6 +287,7 @@
       .like-cap-bar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; gap: 6px; align-items: center; background: rgba(0,0,0,0.5); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 999px; padding: 6px 12px; font-size: 0.72rem; color: rgba(247,247,248,0.64); white-space: nowrap; }
       .like-pip { width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); background: transparent; transition: background 0.2s; }
       .like-pip.filled { background: #ff355f; border-color: #ff355f; }
+      [data-dislike].active { background: #ff355f; border-color: rgba(255,255,255,0.32); }
       .modal-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(5,6,8,0.88); backdrop-filter: blur(16px); display: flex; align-items: center; justify-content: center; padding: 20px; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
       .modal-backdrop.show { opacity: 1; pointer-events: all; }
       .modal-box { background: #0e1014; border: 1px solid rgba(255,255,255,0.12); border-radius: 0; padding: 28px 26px 24px; width: min(500px, 100%); max-height: 90dvh; overflow-y: auto; box-shadow: 0 32px 80px rgba(0,0,0,0.6); transform: translateY(20px); transition: transform 0.25s ease; }
@@ -463,7 +464,7 @@
       const AUTO_SAVE_BATCH_SIZE = 30;
       const QUEUE_SIZE = 18;
       const VARIANTS_PER_UNLOCK = 2;
-      const WATCH_UNLOCK_PERCENT = 65;
+      const WATCH_UNLOCK_PERCENT = 101; // Disabled: unlock by 3 likes only, not by watch percent
       const FALLBACK_KEYWORDS = ['pistachios', 'orchard', 'factory', 'jars', 'green', 'people'];
       const responses = loadJson(RESPONSES_KEY, {});
       const variantsSeen = new Set();
@@ -1034,12 +1035,10 @@
         state.likes[videoId] = !wasLiked;
         localStorage.setItem(LIKES_KEY, JSON.stringify(state.likes));
         recordEvent(videoId, 'like', state.likes[videoId] ? 'on' : 'off', { surface: state.mode });
-        if (item?.studyRole === 'seed' && state.likes[videoId]) {
+        if (item?.studyRole === 'seed' && state.likes[videoId] && countSeedLikes() >= R1_LIKE_CAP) {
           if (unlockGeneratedSet(videoId, 'like')) return;
-          // If no variants yet but cap reached, still show interstitial
-          if (countSeedLikes() >= R1_LIKE_CAP) {
-            document.getElementById('interstitial').classList.add('show');
-          }
+          // If no variants yet but cap reached, show interstitial
+          document.getElementById('interstitial').classList.add('show');
         }
         // Open keyword modal after liking a variant
         if (item?.studyRole === 'variant' && state.likes[videoId]) {
@@ -1844,6 +1843,9 @@
           responses[vid].liked = false;
           localStorage.setItem(RESPONSES_KEY, JSON.stringify(responses));
           recordEvent(vid, 'dislike_reasons', reasons.join(','));
+          // Fill the dislike button red
+          const btn = document.querySelector('[data-dislike="' + CSS.escape(vid) + '"]');
+          if (btn) btn.classList.add('active');
         } else { recordEvent(vid, 'dislike_skipped', ''); }
       }
 
