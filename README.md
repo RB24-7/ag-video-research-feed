@@ -57,9 +57,9 @@ The builder will:
 - List every MP4 in `original-ads/`.
 - Create or reuse Dropbox shared links for the original videos.
 - Recursively scan `generated-outputs/` for folders that contain `new_ad_*.mp4` files.
-- Match each original ad to its generated-output folder, including cleaner folder names that share the same key words.
+- Match each original ad to its generated-output folder, including cleaner folder names that share the same key words or drop leading date prefixes.
 - Add all `new_ad_*.mp4` generated variants.
-- Try to pull keywords from `final_keywords.csv`, `mining_summary.csv`, or `merged_keywords.csv`.
+- Try to pull keywords from `final_keywords.csv`, `mining_summary.csv`, or `merged_keywords.csv` while ignoring CSV header columns such as `Frame` and `Confidence`.
 - Write `data/video-manifest.json`.
 - Report discovered versus matched generated-video counts, then warn about unmatched originals or folders.
 
@@ -87,8 +87,9 @@ If Dropbox videos change later, update Dropbox and rerun the manifest builder. T
 1. The page shuffles the original ads so each participant gets a random order.
 2. A participant watches, skips, pauses, mutes, or likes videos naturally.
 3. If they like an original ad or watch enough of it, the page unlocks that ad's generated variants.
-4. The participant picks the generated version they prefer and chooses the keyword they think best matches the ad.
-5. The hidden admin view can export the captured events for analysis.
+4. The participant sees a deterministic random 2-of-5 generated-variant subset for that ad.
+5. The participant reacts to the generated variants and chooses the keywords that best match what stood out.
+6. The hidden admin view can export the captured events for analysis.
 
 ## Tracked Events
 

@@ -462,6 +462,7 @@
       const AUTO_SAVE_ENDPOINT = CLOUD_ANALYTICS.endpoint;
       const AUTO_SAVE_BATCH_SIZE = 30;
       const QUEUE_SIZE = 18;
+      const VARIANTS_PER_UNLOCK = 2;
       const WATCH_UNLOCK_PERCENT = 65;
       const FALLBACK_KEYWORDS = ['pistachios', 'orchard', 'factory', 'jars', 'green', 'people'];
       const responses = loadJson(RESPONSES_KEY, {});
@@ -790,7 +791,7 @@
 
       function getStudyVariants(seed) {
         if (!seed) return [];
-        return state.items
+        const variants = state.items
           .filter((item) =>
             item.studyRole === 'variant' &&
             (item.seedId === seed.id || item.studySetId === seed.studySetId)
@@ -801,6 +802,21 @@
             if (leftOrder !== rightOrder) return leftOrder - rightOrder;
             return seededHash(`${state.sessionId}:${left.id}`) - seededHash(`${state.sessionId}:${right.id}`);
           });
+
+        return shuffleForParticipant(variants, seed.id).slice(0, VARIANTS_PER_UNLOCK);
+      }
+
+      function getVisibleStudyVariants() {
+        return state.queue.filter((item) => item.studyRole === 'variant');
+      }
+
+      function shuffleForParticipant(items, salt) {
+        const shuffled = [...items];
+        for (let index = shuffled.length - 1; index > 0; index -= 1) {
+          const swapIndex = seededHash(`${state.sessionId}:${salt}:${index}`) % (index + 1);
+          [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+        }
+        return shuffled;
       }
 
       function resolveItem(item) {
@@ -1110,8 +1126,8 @@
         }
         if (item?.studyRole === 'variant' && percent >= 90) {
           variantsSeen.add(videoId);
-          const allVariants = state.items.filter(i => i.studyRole === 'variant');
-          if (allVariants.length > 0 && variantsSeen.size >= allVariants.length) {
+          const visibleVariants = getVisibleStudyVariants();
+          if (visibleVariants.length > 0 && visibleVariants.every((variant) => variantsSeen.has(variant.id))) {
             showSubmitScreen();
           }
         }
@@ -1855,7 +1871,7 @@
       document.getElementById('exportFinalJson').addEventListener('click', () => {
         const now = new Date().toISOString();
         const seeds = state.items.filter(i => i.studyRole === 'seed');
-        const variants = state.items.filter(i => i.studyRole === 'variant');
+        const variants = getVisibleStudyVariants();
         const payload = {
           participantId: state.participantId, studyLabel: state.studyLabel,
           sessionId: state.sessionId, exportedAt: now,
@@ -1874,7 +1890,7 @@
       document.getElementById('exportFinalCsv').addEventListener('click', () => {
         const now = new Date().toISOString();
         const seeds = state.items.filter(i => i.studyRole === 'seed');
-        const variants = state.items.filter(i => i.studyRole === 'variant');
+        const variants = getVisibleStudyVariants();
         const headers = ['participantId','studyLabel','sessionId','videoId','videoTitle','modelName','round','liked','dislikeReasons','keywords','exportedAt'];
         const rows = [
           ...seeds.map(item => [state.participantId, state.studyLabel, state.sessionId, item.id, item.title, '', 1, !!state.likes[item.id], '', '', now]),

@@ -19,6 +19,16 @@ const STOPWORDS = new Set([
   'animated', 'about', 'all', 'your', 'you', 'it', 'its', 'order', 'now', 'yours',
   'days', 'pack'
 ]);
+const CSV_HEADER_VALUES = new Set([
+  'frame', 'frame_id', 'frameid', 'timestamp', 'time', 'start', 'end', 'confidence',
+  'score', 'source', 'rank', 'count', 'frequency', 'keyword', 'keywords', 'label',
+  'labels', 'object', 'objects', 'class', 'classes', 'term', 'terms', 'concept',
+  'concepts', 'caption', 'description', 'video', 'file', 'filename', 'model'
+]);
+const KEYWORD_COLUMN_NAMES = new Set([
+  'keyword', 'keywords', 'label', 'labels', 'object', 'objects', 'class', 'classes',
+  'term', 'terms', 'concept', 'concepts'
+]);
 
 const args = parseArgs(process.argv.slice(2));
 await loadDotEnv(args.env || '.env');
@@ -134,7 +144,9 @@ const unmatchedGenerated = [...generatedBySetId.values()]
 if (originalsWithoutGenerated.length) {
   console.warn(`Original ads without matched generated videos: ${originalsWithoutGenerated.length}`);
   for (const set of originalsWithoutGenerated.slice(0, 20)) {
-    console.warn(`  - ${set.seed.fileName} -> expected folder id "${set.id}"`);
+    const canonicalId = canonicalSetId(set.id);
+    const expected = canonicalId === set.id ? `"${set.id}"` : `"${canonicalId}" or "${set.id}"`;
+    console.warn(`  - ${set.seed.fileName} -> expected folder id ${expected}`);
   }
 }
 
@@ -384,13 +396,82 @@ async function downloadSmallText(entry, folderRef) {
 }
 
 function parseKeywords(csv) {
-  return uniqueList(csv
-    .split(/[\n,\r]+/)
-    .map((value) => value.trim().replace(/^"|"$/g, ''))
-    .filter((value) => value.length >= 3)
-    .filter((value) => !/^\d+(\.\d+)?$/.test(value))
-    .filter((value) => !['keyword', 'keywords', 'score', 'source', 'rank', 'count'].includes(value.toLowerCase()))
+  const rows = parseCsvRows(csv)
+    .map((row) => row.map(cleanCsvValue))
+    .filter((row) => row.some(Boolean));
+
+  if (!rows.length) return [];
+
+  const header = rows[0].map(normalizeCsvHeader);
+  const hasHeader = header.some((value) => CSV_HEADER_VALUES.has(value));
+  const keywordColumns = hasHeader
+    ? header.map((value, index) => KEYWORD_COLUMN_NAMES.has(value) ? index : -1).filter((index) => index >= 0)
+    : [];
+  const valueRows = hasHeader ? rows.slice(1) : rows;
+  const values = keywordColumns.length
+    ? valueRows.flatMap((row) => keywordColumns.map((index) => row[index] || ''))
+    : valueRows.flat();
+
+  return uniqueList(values
+    .map(cleanCsvValue)
+    .filter(isKeywordValue)
   ).slice(0, 8);
+}
+
+function parseCsvRows(csv) {
+  const rows = [];
+  let row = [];
+  let value = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < csv.length; index += 1) {
+    const char = csv[index];
+    const next = csv[index + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      value += '"';
+      index += 1;
+    } else if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      row.push(value);
+      value = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') index += 1;
+      row.push(value);
+      rows.push(row);
+      row = [];
+      value = '';
+    } else {
+      value += char;
+    }
+  }
+
+  row.push(value);
+  rows.push(row);
+  return rows;
+}
+
+function cleanCsvValue(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .trim();
+}
+
+function normalizeCsvHeader(value) {
+  return cleanCsvValue(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function isKeywordValue(value) {
+  const cleaned = cleanCsvValue(value);
+  if (cleaned.length < 3) return false;
+  if (/^\d+(\.\d+)?$/.test(cleaned)) return false;
+  if (CSV_HEADER_VALUES.has(normalizeCsvHeader(cleaned))) return false;
+  return true;
 }
 
 function isVideoFile(fileName) {
@@ -448,20 +529,25 @@ function uniqueList(values) {
 
 function findGeneratedMatch(originalId, generatedBySetId) {
   if (generatedBySetId.has(originalId)) return generatedBySetId.get(originalId);
+  const canonicalOriginalId = canonicalSetId(originalId);
+  if (generatedBySetId.has(canonicalOriginalId)) return generatedBySetId.get(canonicalOriginalId);
 
   const directMatches = [...generatedBySetId.entries()]
-    .filter(([generatedId]) => (
-      generatedId.length >= 6 &&
-      originalId.length >= 6 &&
-      (generatedId.includes(originalId) || originalId.includes(generatedId))
-    ));
+    .filter(([generatedId]) => {
+      const canonicalGeneratedId = canonicalSetId(generatedId);
+      return (
+        canonicalGeneratedId.length >= 6 &&
+        canonicalOriginalId.length >= 6 &&
+        (canonicalGeneratedId.includes(canonicalOriginalId) || canonicalOriginalId.includes(canonicalGeneratedId))
+      );
+    });
 
   if (directMatches.length === 1) return directMatches[0][1];
 
   const fuzzyMatches = [...generatedBySetId.entries()]
     .map(([generatedId, generated]) => ({
       generated,
-      score: matchScore(originalId, generatedId)
+      score: matchScore(canonicalOriginalId, canonicalSetId(generatedId))
     }))
     .filter((candidate) => candidate.score.overlap >= 2 && candidate.score.coverage >= 0.6)
     .sort((left, right) =>
@@ -475,6 +561,10 @@ function findGeneratedMatch(originalId, generatedBySetId) {
   if (next && Math.abs(best.score.weighted - next.score.weighted) < 0.05) return undefined;
 
   return best.generated;
+}
+
+function canonicalSetId(value) {
+  return slugId(value).replace(/^(?:\d{1,4}-)+(?=[a-z])/i, '');
 }
 
 function matchScore(originalId, generatedId) {
