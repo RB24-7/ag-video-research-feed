@@ -156,44 +156,6 @@
         -webkit-backdrop-filter: blur(12px);
       }
 
-      .keyword-panel {
-        display: grid;
-        gap: 8px;
-        width: min(100%, 320px);
-        pointer-events: auto;
-      }
-
-      .keyword-question {
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 0.9rem;
-        font-weight: 700;
-        text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7);
-      }
-
-      .keyword-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 7px;
-      }
-
-      .keyword-chip {
-        appearance: none;
-        cursor: pointer;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.48);
-        color: white;
-        padding: 8px 10px;
-        font-size: 0.8rem;
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-      }
-
-      .keyword-chip.active {
-        background: white;
-        color: #08090c;
-      }
-
       .reel-progress {
         position: absolute;
         left: 0;
@@ -487,6 +449,7 @@
       const STUDY_LABEL_KEY = 'signal-loop-html-study-label';
       const EVENTS_KEY = 'signal-loop-html-events';
       const LIKES_KEY = 'signal-loop-html-likes';
+      const RESPONSES_KEY = 'ag-video-responses';
       const CUSTOM_DROPBOX_KEY = 'signal-loop-html-dropbox-videos';
       const UNSENT_EVENTS_KEY = 'signal-loop-html-unsent-events';
       const STUDY_STATE_KEY = 'signal-loop-html-study-flow';
@@ -501,6 +464,8 @@
       const QUEUE_SIZE = 18;
       const WATCH_UNLOCK_PERCENT = 65;
       const FALLBACK_KEYWORDS = ['pistachios', 'orchard', 'factory', 'jars', 'green', 'people'];
+      const responses = loadJson(RESPONSES_KEY, {});
+      const variantsSeen = new Set();
 
       const state = {
         sessionId: getSessionId(),
@@ -838,12 +803,6 @@
           });
       }
 
-      function getKeywordOptions(item) {
-        const seed = state.items.find((candidate) => candidate.id === item.seedId) || getCurrentSeed();
-        const keywords = item.questionKeywords || seed?.questionKeywords || FALLBACK_KEYWORDS;
-        return [...new Set(keywords)].slice(0, 6);
-      }
-
       function resolveItem(item) {
         return {
           ...item,
@@ -879,7 +838,6 @@
         reelFeed.innerHTML = state.queue
           .map((item) => {
             const isVariant = item.studyRole === 'variant';
-            const chosenKeyword = state.study.keywordChoices[item.id];
             const studyLabel = isVariant ? item.shortLabel || item.modelName || 'Generated' : '';
             return `
               <article class="reel-card" data-video-id="${escapeAttr(item.id)}">
@@ -895,21 +853,6 @@
                   ></video>
                   <div class="study-overlay">
                     ${studyLabel ? `<span class="study-label">${escapeHtml(studyLabel)}</span>` : ''}
-                    ${isVariant ? `
-                      <div class="keyword-panel">
-                        <div class="keyword-question">Main keyword?</div>
-                        <div class="keyword-chips">
-                          ${getKeywordOptions(item).map((keyword) => `
-                            <button
-                              class="${chosenKeyword === keyword ? 'keyword-chip active' : 'keyword-chip'}"
-                              data-keyword-video="${escapeAttr(item.id)}"
-                              data-keyword="${escapeAttr(keyword)}"
-                              type="button"
-                            >${escapeHtml(keyword)}</button>
-                          `).join('')}
-                        </div>
-                      </div>
-                    ` : ''}
                   </div>
                   ${!isVariant ? (() => { const n = countSeedLikes(); return `<div class="like-cap-bar">${[0,1,2].map(i => `<span class="like-pip${n > i ? ' filled' : ''}"></span>`).join('')}<span>${n}/${R1_LIKE_CAP}</span></div>`; })() : ''}
                   <div class="reel-actions">
@@ -933,13 +876,6 @@
 
         reelFeed.querySelectorAll('[data-best]').forEach((button) => {
           button.addEventListener('click', () => chooseVariant(button.getAttribute('data-best')));
-        });
-
-        reelFeed.querySelectorAll('[data-keyword-video]').forEach((button) => {
-          button.addEventListener('click', () => chooseKeyword(
-            button.getAttribute('data-keyword-video'),
-            button.getAttribute('data-keyword')
-          ));
         });
 
         reelFeed.querySelectorAll('[data-mute]').forEach((button) => {
@@ -1144,22 +1080,6 @@
         renderAdmin();
       }
 
-      function chooseKeyword(videoId, keyword) {
-        const item = state.items.find((candidate) => candidate.id === videoId);
-        if (!item || !keyword) return;
-
-        state.study.keywordChoices[videoId] = keyword;
-        saveStudyState();
-        recordEvent(videoId, 'keyword_choice', keyword, {
-          seedId: item.seedId,
-          studySetId: item.studySetId,
-          modelName: item.modelName || item.title,
-          keywordSource: 'pipeline_extracted_keywords'
-        });
-        refreshReelControls();
-        renderAdmin();
-      }
-
       function refreshReelControls() {
         reelFeed.querySelectorAll('[data-like]').forEach((button) => {
           const videoId = button.getAttribute('data-like');
@@ -1170,12 +1090,6 @@
 
         reelFeed.querySelectorAll('[data-best]').forEach((button) => {
           button.classList.toggle('active', button.getAttribute('data-best') === state.study.selectedVariantId);
-        });
-
-        reelFeed.querySelectorAll('[data-keyword-video]').forEach((button) => {
-          const videoId = button.getAttribute('data-keyword-video');
-          const keyword = button.getAttribute('data-keyword');
-          button.classList.toggle('active', state.study.keywordChoices[videoId] === keyword);
         });
       }
 
@@ -1366,13 +1280,16 @@
         const hostedDropboxCount = state.items.filter((item) =>
           item.source?.kind === 'url' && (item.source.provider === 'dropbox' || item.sourceLabel === 'dropbox')
         ).length;
+        const keywordResponseCount = Object.values(responses).filter((response) => response.keywords?.length).length;
+        const dislikeResponseCount = Object.values(responses).filter((response) => response.dislikeReasons?.length).length;
         adminSummary.innerHTML = `
           <div class="admin-stat"><span>Participant</span><strong>${escapeHtml(state.participantId)}</strong></div>
           <div class="admin-stat"><span>Study label</span><strong>${escapeHtml(state.studyLabel)}</strong></div>
           <div class="admin-stat"><span>Session</span><strong>${escapeHtml(state.sessionId.slice(0, 12))}</strong></div>
           <div class="admin-stat"><span>Study phase</span><strong>${escapeHtml(state.study.phase)}</strong></div>
           <div class="admin-stat"><span>Selected variant</span><strong>${escapeHtml(state.study.selectedVariantId || 'none')}</strong></div>
-          <div class="admin-stat"><span>Keyword picks</span><strong>${Object.keys(state.study.keywordChoices).length}</strong></div>
+          <div class="admin-stat"><span>Keyword responses</span><strong>${keywordResponseCount}</strong></div>
+          <div class="admin-stat"><span>Dislike responses</span><strong>${dislikeResponseCount}</strong></div>
           <div class="admin-stat"><span>Videos loaded</span><strong>${state.queue.length}</strong></div>
           <div class="admin-stat"><span>Hosted Dropbox videos</span><strong>${hostedDropboxCount}</strong></div>
           <div class="admin-stat"><span>Auto-save pending</span><strong>${state.unsentEvents.length}</strong></div>
@@ -1547,6 +1464,9 @@
         localStorage.setItem(EVENTS_KEY, JSON.stringify(state.events));
         localStorage.setItem(UNSENT_EVENTS_KEY, JSON.stringify(state.unsentEvents));
         localStorage.removeItem(LIKES_KEY);
+        Object.keys(responses).forEach((key) => delete responses[key]);
+        variantsSeen.clear();
+        localStorage.removeItem(RESPONSES_KEY);
         saveStudyState();
       }
 
@@ -1793,9 +1713,6 @@
       // ── Added features ────────────────────────────────────────────────
 
       const R1_LIKE_CAP = 3;
-      const RESPONSES_KEY = 'ag-video-responses';
-      const responses = loadJson(RESPONSES_KEY, {});
-      const variantsSeen = new Set();
       let pendingLikeId = null;
       let pendingDlId = null;
 
