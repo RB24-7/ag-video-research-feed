@@ -59,6 +59,7 @@ The builder will:
 - Recursively scan `generated-outputs/` for folders that contain `new_ad_*.mp4` files.
 - Match each original ad to its generated-output folder, including cleaner folder names that share the same key words or drop leading date prefixes.
 - Add all `new_ad_*.mp4` generated variants.
+- Prefer browser-safe generated files with suffixes such as `_mac`, `_web`, or `_h264` when both raw OpenCV and web-encoded versions exist.
 - Try to pull keywords from `final_keywords.csv`, `mining_summary.csv`, or `merged_keywords.csv` while ignoring CSV header columns such as `Frame` and `Confidence`.
 - Write `data/video-manifest.json`.
 - Report discovered versus matched generated-video counts, then warn about unmatched originals or folders.
@@ -81,6 +82,8 @@ data/video-manifest.json
 ```
 
 If Dropbox videos change later, update Dropbox and rerun the manifest builder. The HTML does not need to change.
+
+For browser playback, generated MP4 files should be H.264/AVC (`avc1`) with `yuv420p` pixels. OpenCV `mp4v` files can show as a green screen on some Macs/browsers, so re-encode those before uploading or provide `_mac`/`_web` copies in Dropbox.
 
 ## Research Flow
 

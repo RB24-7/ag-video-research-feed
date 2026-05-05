@@ -62,9 +62,7 @@ const generatedBySetId = new Map();
 for (const folder of generatedFolders) {
   const setId = slugId(folder.name);
   const folderRef = folder.ref || childDropboxRef(generatedRoot, folder.name, folder);
-  const videoFiles = folder.entries
-    .filter((entry) => entry['.tag'] === 'file' && isGeneratedVideoFile(entry.name))
-    .sort((left, right) => modelSortKey(left.name) - modelSortKey(right.name));
+  const videoFiles = selectPreferredGeneratedVideos(folder.entries);
   const keywords = await readKeywords(folder.entries, folderRef);
 
   generatedBySetId.set(setId, {
@@ -482,6 +480,25 @@ function isGeneratedVideoFile(fileName) {
   return isVideoFile(fileName) && /^new_ad_/i.test(fileName);
 }
 
+function selectPreferredGeneratedVideos(entries) {
+  const byModel = new Map();
+  const files = entries.filter((entry) => entry['.tag'] === 'file' && isGeneratedVideoFile(entry.name));
+
+  for (const file of files) {
+    const modelKey = modelKeyFromFilename(file.name);
+    const current = byModel.get(modelKey);
+    if (!current || generatedFilePreference(file.name) > generatedFilePreference(current.name)) {
+      byModel.set(modelKey, file);
+    }
+  }
+
+  return [...byModel.values()].sort((left, right) => modelSortKey(left.name) - modelSortKey(right.name));
+}
+
+function generatedFilePreference(fileName) {
+  return /(?:^|[_-])(web|mac|h264|browser|safari|chrome)(?:[_-]|\.|$)/i.test(fileName) ? 2 : 1;
+}
+
 function stripExtension(fileName) {
   return fileName.replace(/\.[^.]+$/, '');
 }
@@ -489,6 +506,7 @@ function stripExtension(fileName) {
 function modelKeyFromFilename(fileName) {
   return stripExtension(fileName)
     .replace(/^new_ad_/i, '')
+    .replace(/(?:[_-](web|mac|h264|browser|safari|chrome))$/i, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '');
 }
