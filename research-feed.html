@@ -466,6 +466,8 @@
       const VARIANTS_PER_UNLOCK = 2;
       const WATCH_UNLOCK_PERCENT = 101; // Disabled: unlock by 3 likes only, not by watch percent
       const FALLBACK_KEYWORDS = ['pistachios', 'orchard', 'factory', 'jars', 'green', 'people'];
+      const VIDEO_PROXY_PATH = 'video-proxy.php?url=';
+      const DIRECT_DROPBOX = new URLSearchParams(window.location.search).has('directDropbox');
       const responses = loadJson(RESPONSES_KEY, {});
       const variantsSeen = new Set();
 
@@ -844,6 +846,9 @@
           if (provider === 'dropbox' || host.endsWith('dropbox.com')) {
             url.searchParams.delete('dl');
             url.searchParams.set('raw', '1');
+            if (!DIRECT_DROPBOX && window.location.protocol.startsWith('http')) {
+              return VIDEO_PROXY_PATH + encodeURIComponent(url.toString());
+            }
           }
           return url.toString();
         } catch {

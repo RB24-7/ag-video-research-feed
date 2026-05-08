@@ -7,6 +7,7 @@ Large videos stay in Dropbox. The repo does not hardcode individual video links.
 ## Main Files
 
 - `research-feed.html` is the standalone participant page.
+- `video-proxy.php` streams Dropbox videos with a browser-friendly `video/mp4` header when the page is hosted on Apache/PHP.
 - `scripts/build-dropbox-manifest.mjs` reads Dropbox and generates `data/video-manifest.json`.
 - `data/video-manifest.json` is generated output and is intentionally ignored by git.
 - `research-feed.html?admin=1` opens the hidden researcher panel for local exports and testing.
@@ -78,12 +79,15 @@ Upload these files while keeping the same structure:
 
 ```text
 research-feed.html
+video-proxy.php
 data/video-manifest.json
 ```
 
 If Dropbox videos change later, update Dropbox and rerun the manifest builder. The HTML does not need to change.
 
 For browser playback, generated MP4 files should be H.264/AVC (`avc1`) with `yuv420p` pixels. OpenCV `mp4v` files can show as a green screen on some Macs/browsers, so re-encode those before uploading or provide `_mac`/`_web` copies in Dropbox.
+
+Dropbox may serve MP4 bytes with the wrong MIME type. Hosted pages automatically route Dropbox video URLs through `video-proxy.php`; add `?directDropbox=1` to the page URL only when testing direct Dropbox links.
 
 ## Research Flow
 
