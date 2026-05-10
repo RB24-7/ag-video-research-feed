@@ -477,7 +477,9 @@ function isVideoFile(fileName) {
 }
 
 function isGeneratedVideoFile(fileName) {
-  return isVideoFile(fileName) && /^new_ad_/i.test(fileName);
+  return isVideoFile(fileName) &&
+    /^(?:new_ad_|all_new_ads_)/i.test(fileName) &&
+    isWebGeneratedVideoFile(fileName);
 }
 
 function selectPreferredGeneratedVideos(entries) {
@@ -495,8 +497,12 @@ function selectPreferredGeneratedVideos(entries) {
   return [...byModel.values()].sort((left, right) => modelSortKey(left.name) - modelSortKey(right.name));
 }
 
+function isWebGeneratedVideoFile(fileName) {
+  return /(?:^|[._-])web(?:[._-]|$)/i.test(stripExtension(fileName));
+}
+
 function generatedFilePreference(fileName) {
-  return /(?:^|[_-])(web|mac|h264|browser|safari|chrome)(?:[_-]|\.|$)/i.test(fileName) ? 2 : 1;
+  return isWebGeneratedVideoFile(fileName) ? 2 : 1;
 }
 
 function stripExtension(fileName) {
@@ -505,8 +511,8 @@ function stripExtension(fileName) {
 
 function modelKeyFromFilename(fileName) {
   return stripExtension(fileName)
-    .replace(/^new_ad_/i, '')
-    .replace(/(?:[_-](web|mac|h264|browser|safari|chrome))$/i, '')
+    .replace(/^(?:new_ad_|all_new_ads_)/i, '')
+    .replace(/(?:[._-](web|mac|h264|browser|safari|chrome))$/i, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '');
 }

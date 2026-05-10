@@ -57,10 +57,10 @@ The builder will:
 
 - List every MP4 in `original-ads/`.
 - Create or reuse Dropbox shared links for the original videos.
-- Recursively scan `generated-outputs/` for folders that contain `new_ad_*.mp4` files.
+- Recursively scan `generated-outputs/` for folders that contain generated MP4 files.
 - Match each original ad to its generated-output folder, including cleaner folder names that share the same key words or drop leading date prefixes.
-- Add all `new_ad_*.mp4` generated variants.
-- Prefer browser-safe generated files with suffixes such as `_mac`, `_web`, or `_h264` when both raw OpenCV and web-encoded versions exist.
+- Add only generated variants named `new_ad_*_web.mp4` or `all_new_ads_*.web.mp4`.
+- Ignore raw generated MP4 files without a `.web` or `_web` marker so browsers do not accidentally load problematic OpenCV outputs.
 - Try to pull keywords from `final_keywords.csv`, `mining_summary.csv`, or `merged_keywords.csv` while ignoring CSV header columns such as `Frame` and `Confidence`.
 - Write `data/video-manifest.json`.
 - Report discovered versus matched generated-video counts, then warn about unmatched originals or folders.
@@ -73,6 +73,28 @@ node scripts/build-dropbox-manifest.mjs --debug
 
 The Dropbox token stays on the server. Never paste it into `research-feed.html` or commit it to git.
 
+## Generated Video Names
+
+For browser playback, Colab should export generated MP4 files as H.264/AVC (`avc1`), `yuv420p`, and fast-start MP4s. OpenCV `mp4v` files can show as a green screen on some Macs/browsers.
+
+The manifest builder only recognizes generated variants with either web-safe naming style:
+
+```text
+new_ad_anythingv5_web.mp4
+new_ad_revanimated_web.mp4
+new_ad_toonyou_web.mp4
+new_ad_dreamshaper_web.mp4
+new_ad_sd15_web.mp4
+
+all_new_ads_anythingv5.web.mp4
+all_new_ads_revanimated.web.mp4
+all_new_ads_toonyou.web.mp4
+all_new_ads_dreamshaper.web.mp4
+all_new_ads_sd15.web.mp4
+```
+
+Put those files inside the generated-output folder for the matching original ad, then rerun the manifest builder. If the `all_new_ads_*` files are master reels containing every ad stitched together, keep those separate from the per-ad research variants.
+
 ## Deploy
 
 Upload these files while keeping the same structure:
@@ -84,8 +106,6 @@ data/video-manifest.json
 ```
 
 If Dropbox videos change later, update Dropbox and rerun the manifest builder. The HTML does not need to change.
-
-For browser playback, generated MP4 files should be H.264/AVC (`avc1`) with `yuv420p` pixels. OpenCV `mp4v` files can show as a green screen on some Macs/browsers, so re-encode those before uploading or provide `_mac`/`_web` copies in Dropbox.
 
 Dropbox may serve MP4 bytes with the wrong MIME type. Hosted pages automatically route Dropbox video URLs through `video-proxy.php`; add `?directDropbox=1` to the page URL only when testing direct Dropbox links.
 
