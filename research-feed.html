@@ -813,6 +813,63 @@
         return state.queue.filter((item) => item.studyRole === 'variant');
       }
 
+      function hasVariantResponse(item) {
+        const response = responses[item.id];
+        return Boolean(response && (
+          response.respondedAt ||
+          response.liked !== undefined ||
+          response.keywords ||
+          response.dislikeReasons
+        ));
+      }
+
+      function getNextUnansweredVariant(currentVideoId) {
+        const variants = getVisibleStudyVariants();
+        if (!variants.length) return null;
+
+        const currentIndex = Math.max(0, variants.findIndex((item) => item.id === currentVideoId));
+        return [
+          ...variants.slice(currentIndex + 1),
+          ...variants.slice(0, currentIndex)
+        ].find((item) => !hasVariantResponse(item)) || null;
+      }
+
+      function focusReelItem(videoId, reason) {
+        const card = reelFeed.querySelector('[data-video-id="' + cssEscape(videoId) + '"]');
+        if (!card) return;
+
+        setActive(videoId, reason || 'response_next');
+        card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        updatePlayback();
+      }
+
+      function completeVariantResponse(videoId, responseType) {
+        const item = state.items.find((candidate) => candidate.id === videoId);
+        if (!item || item.studyRole !== 'variant') return;
+
+        variantsSeen.add(videoId);
+        recordEvent(videoId, 'variant_response_complete', responseType || '', {
+          answeredVariants: getVisibleStudyVariants().filter(hasVariantResponse).length,
+          totalVariants: getVisibleStudyVariants().length
+        });
+
+        refreshReelControls();
+        renderAdmin();
+
+        const visibleVariants = getVisibleStudyVariants();
+        if (visibleVariants.length > 0 && visibleVariants.every(hasVariantResponse)) {
+          setStatus('Responses saved. You are finished.');
+          showSubmitScreen();
+          return;
+        }
+
+        const nextVariant = getNextUnansweredVariant(videoId);
+        if (nextVariant) {
+          setStatus('Response saved. Next video.');
+          focusReelItem(nextVariant.id, 'response_next');
+        }
+      }
+
       function shuffleForParticipant(items, salt) {
         const shuffled = [...items];
         for (let index = shuffled.length - 1; index > 0; index -= 1) {
@@ -1813,13 +1870,21 @@
       function closeKeywordModal(selectedKeywords) {
         document.getElementById('keywordModal').classList.remove('show');
         const vid = pendingLikeId; pendingLikeId = null;
+        if (!vid) return;
+        if (!responses[vid]) responses[vid] = {};
+        responses[vid].liked = true;
+        responses[vid].respondedAt = new Date().toISOString();
+        let responseType = 'keywords_skipped';
         if (selectedKeywords && selectedKeywords.length) {
-          if (!responses[vid]) responses[vid] = {};
           responses[vid].keywords = selectedKeywords;
-          responses[vid].liked = true;
-          localStorage.setItem(RESPONSES_KEY, JSON.stringify(responses));
           recordEvent(vid, 'keywords_selected', selectedKeywords.join(','), { count: selectedKeywords.length });
-        } else { recordEvent(vid, 'keywords_skipped', ''); }
+          responseType = 'keywords_selected';
+        } else {
+          responses[vid].keywords = [];
+          recordEvent(vid, 'keywords_skipped', '');
+        }
+        localStorage.setItem(RESPONSES_KEY, JSON.stringify(responses));
+        completeVariantResponse(vid, responseType);
       }
 
       // Dislike modal
@@ -1842,16 +1907,24 @@
       function closeDislikeModal(reasons) {
         document.getElementById('dislikeModal').classList.remove('show');
         const vid = pendingDlId; pendingDlId = null;
+        if (!vid) return;
+        if (!responses[vid]) responses[vid] = {};
+        responses[vid].liked = false;
+        responses[vid].respondedAt = new Date().toISOString();
+        let responseType = 'dislike_skipped';
         if (reasons && reasons.length) {
-          if (!responses[vid]) responses[vid] = {};
           responses[vid].dislikeReasons = reasons;
-          responses[vid].liked = false;
-          localStorage.setItem(RESPONSES_KEY, JSON.stringify(responses));
           recordEvent(vid, 'dislike_reasons', reasons.join(','));
           // Fill the dislike button red
           const btn = document.querySelector('[data-dislike="' + CSS.escape(vid) + '"]');
           if (btn) btn.classList.add('active');
-        } else { recordEvent(vid, 'dislike_skipped', ''); }
+          responseType = 'dislike_reasons';
+        } else {
+          responses[vid].dislikeReasons = [];
+          recordEvent(vid, 'dislike_skipped', '');
+        }
+        localStorage.setItem(RESPONSES_KEY, JSON.stringify(responses));
+        completeVariantResponse(vid, responseType);
       }
 
       // Submit screen
@@ -1863,8 +1936,8 @@
           const item = state.items.find(i => i.id === id);
           return state.likes[id] && item?.studyRole === 'variant';
         }).length;
-        const kwCount = Object.values(responses).filter(r => r.keywords).length;
-        const dlCount = Object.values(responses).filter(r => r.dislikeReasons).length;
+        const kwCount = Object.values(responses).filter(r => r.keywords?.length).length;
+        const dlCount = Object.values(responses).filter(r => r.dislikeReasons?.length).length;
         document.getElementById('submitSummary').innerHTML =
           '<div class="submit-row"><span>Participant</span><strong>' + escapeHtml(state.participantId) + '</strong></div>' +
           '<div class="submit-row"><span>Study label</span><strong>' + escapeHtml(state.studyLabel) + '</strong></div>' +
