@@ -8,6 +8,8 @@ Large videos stay in Dropbox. The repo does not hardcode individual video links.
 
 - `research-feed.html` is the standalone participant page.
 - `video-proxy.php` streams Dropbox videos with a browser-friendly `video/mp4` header when the page is hosted on Apache/PHP.
+- `study-save.php` validates study responses against the manifest and saves analytics/responses to Supabase.
+- `supabase-schema.sql` creates the Supabase tables and researcher views.
 - `scripts/build-dropbox-manifest.mjs` reads Dropbox and generates `data/video-manifest.json`.
 - `data/video-manifest.json` is generated output and is intentionally ignored by git.
 - `research-feed.html?admin=1` opens the hidden researcher panel for local exports and testing.
@@ -73,6 +75,30 @@ node scripts/build-dropbox-manifest.mjs --debug
 
 The Dropbox token stays on the server. Never paste it into `research-feed.html` or commit it to git.
 
+## Supabase Save
+
+Run `supabase-schema.sql` in the Supabase SQL editor once. Then add these values to the server `.env`:
+
+```bash
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_EVENTS_TABLE=video_events
+SUPABASE_RESPONSES_TABLE=study_responses
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` must stay server-side in `.env`. Do not paste it into `research-feed.html`.
+
+When hosted over HTTP, the participant page sends event batches and final responses to `study-save.php`. The endpoint checks every submitted keyword against `data/video-manifest.json`, then stores the manifest-side keyword confidence/source/rank in Supabase. This means participants only see simple keyword chips, while researchers can query confidence scores later.
+
+Useful Supabase queries:
+
+```sql
+select * from public.video_analytics_summary order by likes desc, impressions desc;
+select * from public.video_events where video_id = 'apple-season-ad-variant-1' order by created_at;
+select * from public.video_keyword_choices where video_id = 'apple-season-ad-variant-1';
+select * from public.video_reason_choices where video_id = 'apple-season-ad-variant-1';
+```
+
 ## Generated Video Names
 
 For browser playback, Colab should export generated MP4 files as H.264/AVC (`avc1`), `yuv420p`, and fast-start MP4s. OpenCV `mp4v` files can show as a green screen on some Macs/browsers.
@@ -102,6 +128,8 @@ Upload these files while keeping the same structure:
 ```text
 research-feed.html
 video-proxy.php
+study-save.php
+supabase-schema.sql
 data/video-manifest.json
 ```
 
@@ -113,13 +141,13 @@ Dropbox may serve MP4 bytes with the wrong MIME type. Hosted pages automatically
 
 1. The page shuffles the original ads so each participant gets a random order.
 2. A participant watches, skips, pauses, mutes, or likes videos naturally.
-3. If they like an original ad or watch enough of it, the page unlocks that ad's generated variants.
+3. If they like one original ad, the page unlocks that ad's generated variants.
 4. The participant sees a deterministic random 2-of-5 generated-variant subset for that ad.
-5. The participant reacts to the generated variants and chooses the keywords that best match what stood out.
-6. The hidden admin view can export the captured events for analysis.
+5. The participant reacts to the generated variants, chooses the keywords that best match what stood out, and gives quick multiple-choice like/dislike reasons.
+6. After the generated responses are saved, the feed returns to original ads and continues looping.
 
 ## Tracked Events
 
 The standalone page records interaction events in the browser, including impressions, watch time, progress milestones, completions, skips, pauses, likes, mute changes, visibility changes, generated-video unlocks, variant picks, and keyword choices.
 
-Cloud auto-save is intentionally disabled in the checked-in file. If a server endpoint or Supabase setup is added later, keep keys on the server and do not commit secrets to this repo.
+When `study-save.php` has Supabase credentials, those events are saved to `video_events` and final responses are saved to `study_responses`. The download buttons remain available as a backup export path.

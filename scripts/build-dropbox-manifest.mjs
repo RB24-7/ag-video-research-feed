@@ -29,6 +29,9 @@ const KEYWORD_COLUMN_NAMES = new Set([
   'keyword', 'keywords', 'label', 'labels', 'object', 'objects', 'class', 'classes',
   'term', 'terms', 'concept', 'concepts'
 ]);
+const CONFIDENCE_COLUMN_NAMES = new Set(['confidence', 'score', 'probability', 'weight']);
+const SOURCE_COLUMN_NAMES = new Set(['source', 'model', 'extractor', 'method']);
+const RANK_COLUMN_NAMES = new Set(['rank', 'order', 'position']);
 
 const args = parseArgs(process.argv.slice(2));
 await loadDotEnv(args.env || '.env');
@@ -63,13 +66,15 @@ for (const folder of generatedFolders) {
   const setId = slugId(folder.name);
   const folderRef = folder.ref || childDropboxRef(generatedRoot, folder.name, folder);
   const videoFiles = selectPreferredGeneratedVideos(folder.entries);
-  const keywords = await readKeywords(folder.entries, folderRef);
+  const keywordDetails = withKeywordIds(setId, await readKeywordDetails(folder.entries, folderRef));
+  const keywords = keywordDetails.map((keyword) => keyword.text);
 
   generatedBySetId.set(setId, {
     setId,
     title: titleFromSlug(setId),
     outputFolder: folderRef.shareUrl || '',
     keywords,
+    keywordDetails,
     variants: await Promise.all(videoFiles.map(async (file, index) => {
       const modelKey = modelKeyFromFilename(file.name);
       const labels = MODEL_LABELS[modelKey] || {
@@ -92,15 +97,17 @@ const sets = await Promise.all(originalFiles.map(async (file) => {
   const setId = slugId(stripExtension(file.name));
   const generated = findGeneratedMatch(setId, generatedBySetId);
   if (generated) matchedGeneratedIds.add(generated.setId);
-  const keywords = uniqueList([
-    ...(generated?.keywords || []),
-    ...keywordsFromTitle(stripExtension(file.name))
+  const keywordDetails = uniqueKeywordDetails([
+    ...(generated?.keywordDetails || []),
+    ...keywordDetailsFromTitle(setId, stripExtension(file.name))
   ]).slice(0, 8);
+  const keywords = keywordDetails.map((keyword) => keyword.text);
 
   return {
     id: setId,
     title: titleFromSlug(setId),
     keywords,
+    keywordDetails,
     tags: ['dropbox', 'source-ad'],
     outputFolder: generated?.outputFolder || '',
     seed: {
@@ -355,7 +362,7 @@ async function listSharedLinks(filePath) {
   return payload.links || [];
 }
 
-async function readKeywords(entries, folderRef) {
+async function readKeywordDetails(entries, folderRef) {
   const keywordFile = entries.find((entry) =>
     entry['.tag'] === 'file' &&
     ['final_keywords.csv', 'mining_summary.csv', 'merged_keywords.csv'].includes(entry.name)
@@ -364,7 +371,7 @@ async function readKeywords(entries, folderRef) {
 
   try {
     const csv = await downloadSmallText(keywordFile, folderRef);
-    return parseKeywords(csv);
+    return parseKeywordDetails(csv, keywordFile.name);
   } catch (error) {
     console.warn(`Could not read keywords from ${keywordFile.name}: ${error.message}`);
     return [];
@@ -393,7 +400,7 @@ async function downloadSmallText(entry, folderRef) {
   return response.text();
 }
 
-function parseKeywords(csv) {
+function parseKeywordDetails(csv, sourceFile = '') {
   const rows = parseCsvRows(csv)
     .map((row) => row.map(cleanCsvValue))
     .filter((row) => row.some(Boolean));
@@ -405,15 +412,39 @@ function parseKeywords(csv) {
   const keywordColumns = hasHeader
     ? header.map((value, index) => KEYWORD_COLUMN_NAMES.has(value) ? index : -1).filter((index) => index >= 0)
     : [];
+  const confidenceIndex = hasHeader ? header.findIndex((value) => CONFIDENCE_COLUMN_NAMES.has(value)) : -1;
+  const sourceIndex = hasHeader ? header.findIndex((value) => SOURCE_COLUMN_NAMES.has(value)) : -1;
+  const rankIndex = hasHeader ? header.findIndex((value) => RANK_COLUMN_NAMES.has(value)) : -1;
   const valueRows = hasHeader ? rows.slice(1) : rows;
-  const values = keywordColumns.length
-    ? valueRows.flatMap((row) => keywordColumns.map((index) => row[index] || ''))
-    : valueRows.flat();
+  const details = [];
 
-  return uniqueList(values
-    .map(cleanCsvValue)
-    .filter(isKeywordValue)
-  ).slice(0, 8);
+  if (keywordColumns.length) {
+    for (const row of valueRows) {
+      for (const index of keywordColumns) {
+        const text = cleanCsvValue(row[index] || '');
+        if (!isKeywordValue(text)) continue;
+        details.push({
+          text,
+          confidence: parseOptionalNumber(row[confidenceIndex]),
+          source: cleanCsvValue(row[sourceIndex] || sourceFile || 'pipeline') || 'pipeline',
+          rank: parseOptionalNumber(row[rankIndex])
+        });
+      }
+    }
+  } else {
+    for (const value of valueRows.flat()) {
+      const text = cleanCsvValue(value);
+      if (!isKeywordValue(text)) continue;
+      details.push({
+        text,
+        confidence: null,
+        source: sourceFile || 'pipeline',
+        rank: null
+      });
+    }
+  }
+
+  return uniqueKeywordDetails(details).slice(0, 8);
 }
 
 function parseCsvRows(csv) {
@@ -470,6 +501,12 @@ function isKeywordValue(value) {
   if (/^\d+(\.\d+)?$/.test(cleaned)) return false;
   if (CSV_HEADER_VALUES.has(normalizeCsvHeader(cleaned))) return false;
   return true;
+}
+
+function parseOptionalNumber(value) {
+  const cleaned = cleanCsvValue(value);
+  if (!cleaned || !/^-?\d+(\.\d+)?$/.test(cleaned)) return null;
+  return Number(cleaned);
 }
 
 function isVideoFile(fileName) {
@@ -545,6 +582,55 @@ function keywordsFromTitle(title) {
     .split('-')
     .filter((word) => word.length >= 3 && !STOPWORDS.has(word))
   ).slice(0, 6);
+}
+
+function keywordDetailsFromTitle(setId, title) {
+  return keywordsFromTitle(title).map((text, index) => ({
+    id: `${setId}:${slugId(text)}`,
+    text,
+    confidence: null,
+    source: 'title',
+    rank: index + 1
+  }));
+}
+
+function withKeywordIds(setId, keywordDetails) {
+  return keywordDetails.map((keyword, index) => ({
+    id: keyword.id || `${setId}:${slugId(keyword.text)}`,
+    text: keyword.text,
+    confidence: keyword.confidence ?? null,
+    source: keyword.source || 'pipeline',
+    rank: keyword.rank ?? index + 1
+  }));
+}
+
+function uniqueKeywordDetails(keywordDetails) {
+  const byText = new Map();
+  for (const keyword of keywordDetails) {
+    const text = cleanCsvValue(keyword?.text || keyword);
+    if (!isKeywordValue(text)) continue;
+    const key = slugId(text);
+    const current = byText.get(key);
+    const normalized = {
+      id: keyword.id || '',
+      text,
+      confidence: keyword.confidence ?? null,
+      source: keyword.source || 'pipeline',
+      rank: keyword.rank ?? null
+    };
+    const currentConfidence = current?.confidence ?? -1;
+    const nextConfidence = normalized.confidence ?? -1;
+    if (!current || nextConfidence > currentConfidence) {
+      byText.set(key, normalized);
+    }
+  }
+
+  return [...byText.values()].sort((left, right) => {
+    const leftRank = left.rank ?? 999;
+    const rightRank = right.rank ?? 999;
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    return (right.confidence ?? -1) - (left.confidence ?? -1);
+  });
 }
 
 function uniqueList(values) {
