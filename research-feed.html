@@ -124,6 +124,11 @@
         -webkit-backdrop-filter: blur(12px);
       }
 
+      .speed-action {
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+
       .round-action.active {
         background: var(--hot);
         border-color: rgba(255, 255, 255, 0.32);
@@ -484,6 +489,7 @@
       const FALLBACK_KEYWORDS = ['pistachios', 'orchard', 'factory', 'jars', 'green', 'people'];
       const VIDEO_PROXY_PATH = 'video-proxy.php?url=';
       const DIRECT_DROPBOX = new URLSearchParams(window.location.search).has('directDropbox');
+      const PLAYBACK_SPEEDS = [1, 1.25, 1.5, 2];
       const responses = loadJson(RESPONSES_KEY, {});
       const variantsSeen = new Set();
 
@@ -499,6 +505,7 @@
         activeId: null,
         mode: 'reel',
         muted: true,
+        playbackRate: 1,
         events: loadJson(EVENTS_KEY, []),
         unsentEvents: loadJson(UNSENT_EVENTS_KEY, []),
         likes: loadJson(LIKES_KEY, {}),
@@ -1028,6 +1035,7 @@
                   <div class="reel-actions">
                     <button class="${state.likes[item.id] ? 'round-action active' : 'round-action'}" data-like="${escapeAttr(item.id)}" type="button">${ICON_THUMBSUP}</button>
                     ${isVariant ? `<button class="round-action" data-dislike="${escapeAttr(item.id)}" type="button">${ICON_DISLIKE}</button>` : ''}
+                    <button class="round-action speed-action" data-speed="${escapeAttr(item.id)}" type="button">${formatPlaybackRate()}</button>
                     <button class="round-action" data-mute="${escapeAttr(item.id)}" type="button">${state.muted ? ICON_MIC_OFF : ICON_MIC_ON}</button>
                   </div>
                   <div class="reel-progress"><span data-progress="${escapeAttr(item.id)}"></span></div>
@@ -1050,6 +1058,9 @@
 
         reelFeed.querySelectorAll('[data-mute]').forEach((button) => {
           button.addEventListener('click', () => toggleMute());
+        });
+        reelFeed.querySelectorAll('[data-speed]').forEach((button) => {
+          button.addEventListener('click', () => cyclePlaybackSpeed());
         });
 
         reelFeed.querySelectorAll('video').forEach(wireVideoEvents);
@@ -1168,6 +1179,7 @@
       function updatePlayback() {
         document.querySelectorAll('video[data-video]').forEach((video) => {
           video.muted = state.muted;
+          video.playbackRate = state.playbackRate;
           if (video.dataset.videoId === state.activeId) {
             video.play().catch(() => {});
           } else {
@@ -1269,6 +1281,24 @@
           button.innerHTML = state.muted ? ICON_MIC_OFF : ICON_MIC_ON;
         });
         updatePlayback();
+      }
+
+      function cyclePlaybackSpeed() {
+        const currentIndex = PLAYBACK_SPEEDS.indexOf(state.playbackRate);
+        const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % PLAYBACK_SPEEDS.length;
+        state.playbackRate = PLAYBACK_SPEEDS[nextIndex];
+        recordEvent(state.activeId || 'page', 'playback_speed', String(state.playbackRate), { surface: state.mode });
+        document.querySelectorAll('[data-speed]').forEach((button) => {
+          button.textContent = formatPlaybackRate();
+        });
+        updatePlayback();
+        setStatus('Speed ' + formatPlaybackRate());
+      }
+
+      function formatPlaybackRate() {
+        return Number.isInteger(state.playbackRate)
+          ? state.playbackRate + 'x'
+          : state.playbackRate + 'x';
       }
 
       function trackProgress(videoId, percent) {
