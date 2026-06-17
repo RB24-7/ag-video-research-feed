@@ -46,7 +46,8 @@ create index if not exists study_responses_video_id_idx on public.study_response
 create index if not exists study_responses_study_set_id_idx on public.study_responses (study_set_id);
 create index if not exists study_responses_session_id_idx on public.study_responses (session_id);
 
-create or replace view public.video_analytics_summary as
+create or replace view public.video_analytics_summary
+with (security_invoker = true) as
 select
   video_id,
   count(*) filter (where event_type = 'impression') as impressions,
@@ -62,7 +63,8 @@ select
 from public.video_events
 group by video_id;
 
-create or replace view public.video_keyword_choices as
+create or replace view public.video_keyword_choices
+with (security_invoker = true) as
 select
   response.video_id,
   response.study_set_id,
@@ -78,7 +80,8 @@ select
 from public.study_responses response,
   lateral jsonb_array_elements(response.keyword_details) keyword;
 
-create or replace view public.video_reason_choices as
+create or replace view public.video_reason_choices
+with (security_invoker = true) as
 select
   video_id,
   study_set_id,

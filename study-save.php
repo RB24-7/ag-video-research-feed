@@ -98,7 +98,6 @@ function build_validation_index(array $manifest): array {
         $setId = clean_text($set['studySetId'] ?? $set['id'] ?? '');
         if (!$setId) continue;
 
-        $keywordMap = build_keyword_map($setId, $set);
         $seedId = slug_id($setId . '-seed');
         $videos[$seedId] = [
             'videoId' => $seedId,
@@ -107,7 +106,7 @@ function build_validation_index(array $manifest): array {
             'round' => 1,
             'modelName' => '',
             'title' => clean_text($set['title'] ?? ''),
-            'keywords' => $keywordMap,
+            'keywords' => build_keyword_map($seedId, $set),
         ];
 
         $variants = is_array($set['variants'] ?? null) ? $set['variants'] : [];
@@ -121,27 +120,17 @@ function build_validation_index(array $manifest): array {
                 'round' => 2,
                 'modelName' => clean_text($variant['modelName'] ?? $variant['model'] ?? $variant['shortLabel'] ?? ''),
                 'title' => clean_text(($variant['shortLabel'] ?? $variant['modelName'] ?? 'Generated') . ' variant'),
-                'keywords' => $keywordMap,
+                'keywords' => build_keyword_map($variantId, $variant, $set),
             ];
         }
     }
     return $videos;
 }
 
-function build_keyword_map(string $setId, array $set): array {
-    $details = [];
-    if (is_array($set['keywordDetails'] ?? null)) {
-        $details = $set['keywordDetails'];
-    } elseif (is_array($set['keywords'] ?? null)) {
-        foreach ($set['keywords'] as $index => $keyword) {
-            $details[] = [
-                'id' => $setId . ':' . slug_id((string) $keyword),
-                'text' => (string) $keyword,
-                'confidence' => null,
-                'source' => 'manifest',
-                'rank' => $index + 1,
-            ];
-        }
+function build_keyword_map(string $videoId, array $source, ?array $fallbackSource = null): array {
+    $details = read_keyword_details($source);
+    if (!$details && $fallbackSource) {
+        $details = read_keyword_details($fallbackSource);
     }
 
     $map = [];
@@ -151,7 +140,7 @@ function build_keyword_map(string $setId, array $set): array {
         if ($text === '') continue;
         $key = slug_id($text);
         $map[$key] = [
-            'id' => clean_text($keyword['id'] ?? ($setId . ':' . $key)),
+            'id' => slug_id($videoId) . ':' . $key,
             'text' => $text,
             'confidence' => numeric_or_null($keyword['confidence'] ?? null),
             'source' => clean_text($keyword['source'] ?? 'pipeline'),
@@ -159,6 +148,33 @@ function build_keyword_map(string $setId, array $set): array {
         ];
     }
     return $map;
+}
+
+function read_keyword_details(array $source): array {
+    if (is_array($source['questionKeywordDetails'] ?? null)) {
+        return $source['questionKeywordDetails'];
+    }
+    if (is_array($source['keywordDetails'] ?? null)) {
+        return $source['keywordDetails'];
+    }
+
+    $keywords = [];
+    $rawKeywords = [];
+    if (is_array($source['questionKeywords'] ?? null)) {
+        $rawKeywords = $source['questionKeywords'];
+    } elseif (is_array($source['keywords'] ?? null)) {
+        $rawKeywords = $source['keywords'];
+    }
+
+    foreach ($rawKeywords as $index => $keyword) {
+        $keywords[] = [
+            'text' => (string) $keyword,
+            'confidence' => null,
+            'source' => 'manifest',
+            'rank' => $index + 1,
+        ];
+    }
+    return $keywords;
 }
 
 function sanitize_events($events, string $participantId, string $studyLabel, string $sessionId): array {
@@ -234,19 +250,35 @@ function validate_keywords(array $response, array $video): array {
     $rawKeywords = [];
     if (is_array($response['keywordDetails'] ?? null)) {
         foreach ($response['keywordDetails'] as $keyword) {
-            if (is_array($keyword)) $rawKeywords[] = clean_text($keyword['text'] ?? '');
+            if (!is_array($keyword)) continue;
+            $rawKeywords[] = [
+                'id' => clean_text($keyword['id'] ?? ''),
+                'text' => clean_text($keyword['text'] ?? ''),
+            ];
         }
     } elseif (is_array($response['keywords'] ?? null)) {
-        $rawKeywords = array_map('clean_text', $response['keywords']);
+        foreach ($response['keywords'] as $keyword) {
+            $rawKeywords[] = [
+                'id' => '',
+                'text' => clean_text($keyword),
+            ];
+        }
     }
 
     $validated = [];
-    foreach (array_filter($rawKeywords) as $keywordText) {
+    foreach ($rawKeywords as $keyword) {
+        $keywordText = clean_text($keyword['text'] ?? '');
+        if ($keywordText === '') continue;
         $key = slug_id($keywordText);
         if (!isset($video['keywords'][$key])) {
             json_fail(422, 'Keyword "' . $keywordText . '" is not valid for video ' . $video['videoId'] . '.');
         }
-        $validated[] = $video['keywords'][$key];
+        $expected = $video['keywords'][$key];
+        $submittedId = clean_text($keyword['id'] ?? '');
+        if ($submittedId !== '' && $submittedId !== $expected['id']) {
+            json_fail(422, 'Keyword "' . $keywordText . '" does not match video ' . $video['videoId'] . '.');
+        }
+        $validated[] = $expected;
     }
     return $validated;
 }
@@ -271,7 +303,6 @@ function supabase_upsert(string $baseUrl, string $key, string $table, array $row
     $body = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $error = curl_error($ch);
-    curl_close($ch);
 
     if ($body === false || $status < 200 || $status >= 300) {
         json_fail(502, 'Supabase save failed: ' . ($error ?: (string) $body));

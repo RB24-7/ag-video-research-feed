@@ -88,15 +88,52 @@ SUPABASE_RESPONSES_TABLE=study_responses
 
 `SUPABASE_SERVICE_ROLE_KEY` must stay server-side in `.env`. Do not paste it into `research-feed.html`.
 
+If Supabase reports a `Security Definer View` warning for an existing database, run:
+
+```sql
+alter view public.video_analytics_summary set (security_invoker = true);
+alter view public.video_keyword_choices set (security_invoker = true);
+alter view public.video_reason_choices set (security_invoker = true);
+```
+
 When hosted over HTTP, the participant page sends event batches and final responses to `study-save.php`. The endpoint checks every submitted keyword against `data/video-manifest.json`, then stores the manifest-side keyword confidence/source/rank in Supabase. This means participants only see simple keyword chips, while researchers can query confidence scores later.
 
 Useful Supabase queries:
 
 ```sql
+select * from public.video_events order by received_at desc limit 20;
+select * from public.study_responses order by received_at desc limit 20;
 select * from public.video_analytics_summary order by likes desc, impressions desc;
 select * from public.video_events where video_id = 'apple-season-ad-variant-1' order by created_at;
 select * from public.video_keyword_choices where video_id = 'apple-season-ad-variant-1';
 select * from public.video_reason_choices where video_id = 'apple-season-ad-variant-1';
+```
+
+For a participant-page smoke test, open `research-feed.html?admin=1&fresh=1&participant=auto&study=smoke-test`.
+The hidden researcher panel shows the cloud target, last cloud save status, saved payload counts, unsent event count, and whether a final response save is pending.
+
+To verify that keyword choices map one-to-one to the exact video watched, run:
+
+```bash
+node scripts/verify-keyword-map.mjs
+```
+
+The verifier prints the effective `video_id -> keyword_id -> keyword_text` map and fails if a video is missing keywords or repeats keyword text. Keyword IDs are scoped as `<video_id>:<keyword>`.
+
+After a demo participant submits responses, confirm Supabase received video-scoped keyword IDs:
+
+```sql
+select
+  participant_id,
+  video_id,
+  model_name,
+  keyword_id,
+  keyword_text,
+  keyword_id like video_id || ':%' as keyword_matches_video,
+  submitted_at
+from public.video_keyword_choices
+where participant_id = 'demo-001'
+order by submitted_at desc, video_id, rank;
 ```
 
 ## Generated Video Names

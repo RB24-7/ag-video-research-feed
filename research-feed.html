@@ -228,6 +228,12 @@
         border-bottom: none;
       }
 
+      .admin-stat strong {
+        max-width: 58%;
+        text-align: right;
+        overflow-wrap: anywhere;
+      }
+
       .admin-actions {
         display: flex;
         flex-wrap: wrap;
@@ -330,6 +336,7 @@
       .submit-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
       .submit-btn { appearance: none; cursor: pointer; border: 1px solid white; border-radius: 0; background: white; color: #07080b; font-size: 1rem; font-weight: 600; padding: 10px 22px; transition: opacity 0.15s; font: inherit; }
       .submit-btn:hover { opacity: 0.85; }
+      .submit-btn:disabled { cursor: not-allowed; opacity: 0.55; }
       .submit-btn.secondary { background: transparent; color: #f7f7f8; border-color: rgba(255,255,255,0.12); }
       #adminToggle { display: none !important; }
       .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -351,6 +358,7 @@
         <button class="ghost-button primary" id="exportJson" type="button">Export JSON</button>
         <button class="ghost-button" id="exportCsv" type="button">Export CSV</button>
         <button class="ghost-button" id="exportSummaryCsv" type="button">Export summary</button>
+        <button class="ghost-button" id="retryCloudSave" type="button">Retry cloud save</button>
         <button class="ghost-button" id="clearData" type="button">Clear local data</button>
       </div>
       <div class="admin-card">
@@ -475,6 +483,8 @@
       const UNSENT_EVENTS_KEY = 'signal-loop-html-unsent-events';
       const STUDY_STATE_KEY = 'signal-loop-html-study-flow';
       const FINAL_SUBMISSION_KEY = 'ag-video-final-submission';
+      const PENDING_FINAL_SUBMISSION_KEY = 'ag-video-pending-final-submission';
+      const CLOUD_SAVE_STATUS_KEY = 'signal-loop-html-cloud-save-status';
       const CLOUD_ANALYTICS = {
         endpoint: window.location.protocol.startsWith('http') ? 'study-save.php' : '',
         supabaseUrl: '',
@@ -508,6 +518,8 @@
         playbackRate: 1,
         events: loadJson(EVENTS_KEY, []),
         unsentEvents: loadJson(UNSENT_EVENTS_KEY, []),
+        pendingFinalSubmission: loadJson(PENDING_FINAL_SUBMISSION_KEY, null),
+        cloudSave: normalizeCloudSaveStatus(loadJson(CLOUD_SAVE_STATUS_KEY, {})),
         likes: loadJson(LIKES_KEY, {}),
         exposure: null,
         watchPercent: {},
@@ -543,6 +555,7 @@
       document.getElementById('exportJson').addEventListener('click', exportJson);
       document.getElementById('exportCsv').addEventListener('click', exportCsv);
       document.getElementById('exportSummaryCsv').addEventListener('click', exportSummaryCsv);
+      document.getElementById('retryCloudSave').addEventListener('click', retryCloudSave);
       document.getElementById('clearData').addEventListener('click', clearLocalData);
       document.getElementById('saveResearchSetup').addEventListener('click', saveResearchSetup);
       document.getElementById('newParticipant').addEventListener('click', startNewParticipant);
@@ -605,6 +618,7 @@
           startInitialExposure();
           updatePlayback();
           renderAdmin();
+          retryPendingFinalSubmission();
           setStatus(`${state.queue.length} videos loaded for this session.`);
         } catch (error) {
           setStatus(
@@ -703,7 +717,7 @@
           studyRole: 'seed',
           shortLabel: 'Original',
           questionKeywords: keywords,
-          questionKeywordDetails: keywordDetails
+          questionKeywordDetails: scopeKeywordDetailsForVideo(keywordDetails, `${studySetId}-seed`)
         });
 
         if (!seed) return [];
@@ -728,7 +742,7 @@
             modelName: variant?.modelName || variant?.model || label,
             shortLabel: label,
             questionKeywords: keywords,
-            questionKeywordDetails: keywordDetails
+            questionKeywordDetails: scopeKeywordDetailsForVideo(keywordDetails, `${studySetId}-variant-${index + 1}`)
           });
         }).filter(Boolean);
 
@@ -751,21 +765,37 @@
           url: rawPosterUrl
         } : undefined);
         const stableId = item.id || defaults.id || rawUrl || `${defaults.manifestPath || 'manifest'}-${defaults.index || 0}`;
+        const normalizedId = slugId(stableId);
+        const questionKeywordDetails = normalizeKeywordDetails(
+          item.questionKeywordDetails || item.keywordDetails || defaults.questionKeywordDetails,
+          item.questionKeywords || item.keywords || defaults.questionKeywords,
+          normalizedId
+        );
 
         return {
           ...defaults,
           ...item,
-          id: slugId(stableId),
+          id: normalizedId,
           tags: [...new Set([...(defaults.tags || []), ...(item.tags || [])])],
           questionKeywords: item.questionKeywords || item.keywords || defaults.questionKeywords,
-          questionKeywordDetails: normalizeKeywordDetails(
-            item.questionKeywordDetails || item.keywordDetails || defaults.questionKeywordDetails,
-            item.questionKeywords || item.keywords || defaults.questionKeywords,
-            item.studySetId || defaults.studySetId || item.id || defaults.id || ''
-          ),
+          questionKeywordDetails: scopeKeywordDetailsForVideo(questionKeywordDetails, normalizedId),
           source,
           poster
         };
+      }
+
+      function scopeKeywordDetailsForVideo(keywordDetails, videoId) {
+        const scopeId = slugId(videoId || 'video');
+        return (keywordDetails || []).map((keyword, index) => {
+          const text = keyword?.text || '';
+          const key = slugId(text || `keyword-${index + 1}`);
+          return {
+            ...keyword,
+            id: `${scopeId}:${key}`,
+            text,
+            rank: typeof keyword?.rank === 'number' ? keyword.rank : index + 1
+          };
+        }).filter((keyword) => keyword.text);
       }
 
       function normalizeKeywordDetails(details, fallbackKeywords, scopeId) {
@@ -965,7 +995,7 @@
         startInitialExposure();
         updatePlayback();
         renderAdmin();
-        setStatus('Responses saved. Continuing with original ads.');
+        setStatus('Feedback recorded. Continuing with original ads.');
       }
 
       function shuffleForParticipant(items, salt) {
@@ -1362,6 +1392,7 @@
         const batch = state.unsentEvents.slice(0, AUTO_SAVE_BATCH_SIZE);
         const target = getAutoSaveTarget();
         if (target.type === 'disabled') {
+          updateCloudSaveStatus({ status: 'disabled', endpointType: 'disabled' });
           if (adminPanel.classList.contains('open')) renderAdmin();
           return;
         }
@@ -1371,16 +1402,29 @@
           sessionId: state.sessionId,
           events: batch
         });
+        updateCloudSaveStatus({
+          status: 'saving',
+          endpointType: target.type,
+          lastAttemptAt: new Date().toISOString(),
+          lastError: ''
+        });
 
         if (options.beacon && target.type === 'endpoint' && navigator.sendBeacon) {
           navigator.sendBeacon(target.endpoint, new Blob([payload], { type: 'application/json' }));
+          updateCloudSaveStatus({
+            status: 'queued',
+            endpointType: target.type,
+            lastAttemptAt: new Date().toISOString(),
+            lastError: 'Sent with beacon; confirmation unavailable.'
+          });
           return;
         }
 
         autoSaveInFlight = true;
         try {
+          let saveResult = { eventsSaved: batch.length, responsesSaved: 0 };
           if (target.type === 'supabase') {
-            await postSupabaseEvents(batch, target);
+            saveResult = await postSupabaseEvents(batch, target);
           } else {
             const response = await fetch(target.endpoint, {
               method: 'POST',
@@ -1388,11 +1432,30 @@
               body: payload,
               keepalive: Boolean(options.keepalive)
             });
-            if (!response.ok) throw new Error('Auto-save failed');
+            const responseBody = await readJsonResponse(response);
+            if (!response.ok) throw new Error(responseBody?.error || 'Auto-save failed');
+            saveResult = {
+              eventsSaved: Number(responseBody?.eventsSaved ?? batch.length),
+              responsesSaved: Number(responseBody?.responsesSaved ?? 0)
+            };
           }
           markAutoSaved(batch);
+          updateCloudSaveStatus({
+            status: 'saved',
+            endpointType: target.type,
+            lastSavedAt: new Date().toISOString(),
+            lastError: '',
+            eventsSaved: saveResult.eventsSaved,
+            responsesSaved: saveResult.responsesSaved
+          });
           if (state.unsentEvents.length) scheduleAutoSave(120);
-        } catch {
+        } catch (error) {
+          updateCloudSaveStatus({
+            status: 'error',
+            endpointType: target.type,
+            lastError: cleanErrorMessage(error),
+            lastAttemptAt: new Date().toISOString()
+          });
           scheduleAutoSave(3000);
         } finally {
           autoSaveInFlight = false;
@@ -1453,6 +1516,8 @@
         if (!response.ok) {
           throw new Error('Supabase auto-save failed');
         }
+
+        return { eventsSaved: rows.length, responsesSaved: 0 };
       }
 
       function getEventContext(videoId) {
@@ -1478,6 +1543,8 @@
 
       function renderAdmin() {
         const report = buildLocalReport();
+        const target = getAutoSaveTarget();
+        const cloudSummary = formatCloudSaveStatus(target);
         const hostedDropboxCount = state.items.filter((item) =>
           item.source?.kind === 'url' && (item.source.provider === 'dropbox' || item.sourceLabel === 'dropbox')
         ).length;
@@ -1493,6 +1560,10 @@
           <div class="admin-stat"><span>Dislike responses</span><strong>${dislikeResponseCount}</strong></div>
           <div class="admin-stat"><span>Videos loaded</span><strong>${state.queue.length}</strong></div>
           <div class="admin-stat"><span>Hosted Dropbox videos</span><strong>${hostedDropboxCount}</strong></div>
+          <div class="admin-stat"><span>Cloud target</span><strong>${escapeHtml(cloudSummary.target)}</strong></div>
+          <div class="admin-stat"><span>Last cloud save</span><strong>${escapeHtml(cloudSummary.lastSave)}</strong></div>
+          <div class="admin-stat"><span>Last cloud payload</span><strong>${escapeHtml(cloudSummary.payload)}</strong></div>
+          <div class="admin-stat"><span>Pending response save</span><strong>${state.pendingFinalSubmission ? 'yes' : 'no'}</strong></div>
           <div class="admin-stat"><span>Auto-save pending</span><strong>${state.unsentEvents.length}</strong></div>
           <div class="admin-stat"><span>Quick-add links</span><strong>${state.customDropboxItems.length}</strong></div>
           <div class="admin-stat"><span>Total local events</span><strong>${report.totalEvents}</strong></div>
@@ -1669,6 +1740,9 @@
         variantsSeen.clear();
         localStorage.removeItem(RESPONSES_KEY);
         localStorage.removeItem(FINAL_SUBMISSION_KEY);
+        state.pendingFinalSubmission = null;
+        localStorage.removeItem(PENDING_FINAL_SUBMISSION_KEY);
+        updateCloudSaveStatus(normalizeCloudSaveStatus({}));
         saveStudyState();
       }
 
@@ -1785,6 +1859,16 @@
         downloadFile(`ag-video-summary-${new Date().toISOString().slice(0, 10)}.csv`, [headers.join(','), ...rows].join('\n'), 'text/csv');
       }
 
+      async function retryCloudSave() {
+        setStatus('Retrying cloud save...');
+        await flushAutoSave();
+        const retriedFinal = await retryPendingFinalSubmission({ manual: true });
+        if (!retriedFinal && !state.unsentEvents.length) {
+          setStatus('No pending cloud save found.');
+        }
+        renderAdmin();
+      }
+
       function downloadFile(filename, content, type) {
         const blob = new Blob([content], { type });
         const url = URL.createObjectURL(blob);
@@ -1847,6 +1931,71 @@
             ? study.keywordChoices
             : {}
         };
+      }
+
+      function normalizeCloudSaveStatus(value) {
+        const status = value && typeof value === 'object' ? value : {};
+        return {
+          status: status.status || 'idle',
+          endpointType: status.endpointType || '',
+          lastAttemptAt: status.lastAttemptAt || '',
+          lastSavedAt: status.lastSavedAt || '',
+          lastError: status.lastError || '',
+          eventsSaved: Number(status.eventsSaved || 0),
+          responsesSaved: Number(status.responsesSaved || 0)
+        };
+      }
+
+      function updateCloudSaveStatus(next) {
+        state.cloudSave = normalizeCloudSaveStatus({
+          ...state.cloudSave,
+          ...next
+        });
+        localStorage.setItem(CLOUD_SAVE_STATUS_KEY, JSON.stringify(state.cloudSave));
+      }
+
+      function formatCloudSaveStatus(target) {
+        const status = state.cloudSave;
+        const targetLabel = target.type === 'disabled'
+          ? 'not configured'
+          : target.type === 'endpoint'
+            ? 'study-save.php'
+            : 'direct Supabase events';
+
+        const lastSave = (() => {
+          if (target.type === 'disabled') return 'off';
+          if (status.status === 'saving') return 'saving now';
+          if (status.status === 'queued') return 'queued on page close';
+          if (status.status === 'error') return status.lastError ? `error: ${status.lastError}` : 'error';
+          if (status.lastSavedAt) return `saved ${formatShortTime(status.lastSavedAt)}`;
+          return 'not saved yet';
+        })();
+
+        return {
+          target: targetLabel,
+          lastSave,
+          payload: `${status.eventsSaved || 0} events / ${status.responsesSaved || 0} responses`
+        };
+      }
+
+      function formatShortTime(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+      }
+
+      async function readJsonResponse(response) {
+        const text = await response.text();
+        if (!text) return {};
+        try {
+          return JSON.parse(text);
+        } catch {
+          return { error: text };
+        }
+      }
+
+      function cleanErrorMessage(error) {
+        return String(error?.message || error || 'Save failed').slice(0, 160);
       }
 
       function saveStudyState() {
@@ -2107,8 +2256,10 @@
         }
 
         const button = document.getElementById('submitFinalResponses');
-        button.disabled = true;
-        if (!options.silent) {
+        const submitScreenVisible = document.getElementById('submitScreen').classList.contains('show');
+        const shouldShowStatus = !options.silent || submitScreenVisible;
+        if (shouldShowStatus) {
+          button.disabled = true;
           setSubmitSaveStatus(options.auto ? 'Saving responses...' : 'Submitting responses...');
         }
         recordEvent('session', options.auto ? 'final_submit_auto' : 'final_submit_manual', '');
@@ -2116,32 +2267,107 @@
         const eventBatch = [...state.unsentEvents];
         const submittedAt = new Date().toISOString();
         const payload = buildFinalSubmissionPayload(submittedAt, eventBatch);
+        state.pendingFinalSubmission = payload;
+        localStorage.setItem(PENDING_FINAL_SUBMISSION_KEY, JSON.stringify(payload));
 
         try {
-          const response = await fetch(target.endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-            keepalive: true
-          });
-          if (!response.ok) throw new Error(await response.text());
+          const saveResult = await postFinalSubmissionPayload(payload, target);
 
           markAutoSaved(eventBatch);
+          state.pendingFinalSubmission = null;
+          localStorage.removeItem(PENDING_FINAL_SUBMISSION_KEY);
           localStorage.setItem(FINAL_SUBMISSION_KEY, JSON.stringify({
             submittedAt,
             participantId: state.participantId,
             sessionId: state.sessionId
           }));
-          if (!options.silent) {
+          updateCloudSaveStatus({
+            status: 'saved',
+            endpointType: target.type,
+            lastSavedAt: new Date().toISOString(),
+            lastError: '',
+            eventsSaved: saveResult.eventsSaved,
+            responsesSaved: saveResult.responsesSaved
+          });
+          if (shouldShowStatus) {
             setSubmitSaveStatus('Responses saved. Downloads are still available as a backup.');
+            button.textContent = 'Responses saved';
           }
           recordEvent('session', 'final_submit_saved', '');
-        } catch {
-          button.disabled = false;
-          if (!options.silent) {
+        } catch (error) {
+          if (shouldShowStatus) {
+            button.disabled = false;
             setSubmitSaveStatus('Could not save yet. Please retry or download the backup file.');
           }
+          updateCloudSaveStatus({
+            status: 'error',
+            endpointType: target.type,
+            lastAttemptAt: new Date().toISOString(),
+            lastError: cleanErrorMessage(error)
+          });
           recordEvent('session', 'final_submit_failed', '');
+        } finally {
+          renderAdmin();
+        }
+      }
+
+      async function postFinalSubmissionPayload(payload, target) {
+        const response = await fetch(target.endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true
+        });
+        const responseBody = await readJsonResponse(response);
+        if (!response.ok) throw new Error(responseBody?.error || 'Final response save failed');
+        return {
+          eventsSaved: Number(responseBody?.eventsSaved ?? payload.events?.length ?? 0),
+          responsesSaved: Number(responseBody?.responsesSaved ?? payload.responses?.length ?? 0)
+        };
+      }
+
+      async function retryPendingFinalSubmission(options = {}) {
+        if (!state.pendingFinalSubmission) return false;
+
+        const target = getAutoSaveTarget();
+        if (target.type !== 'endpoint') {
+          if (options.manual) setStatus('Cloud response save is not configured.');
+          return false;
+        }
+
+        updateCloudSaveStatus({
+          status: 'saving',
+          endpointType: target.type,
+          lastAttemptAt: new Date().toISOString(),
+          lastError: ''
+        });
+
+        try {
+          const saveResult = await postFinalSubmissionPayload(state.pendingFinalSubmission, target);
+          markAutoSaved(state.pendingFinalSubmission.events || []);
+          state.pendingFinalSubmission = null;
+          localStorage.removeItem(PENDING_FINAL_SUBMISSION_KEY);
+          updateCloudSaveStatus({
+            status: 'saved',
+            endpointType: target.type,
+            lastSavedAt: new Date().toISOString(),
+            lastError: '',
+            eventsSaved: saveResult.eventsSaved,
+            responsesSaved: saveResult.responsesSaved
+          });
+          if (options.manual) setStatus('Pending responses saved.');
+          return true;
+        } catch (error) {
+          updateCloudSaveStatus({
+            status: 'error',
+            endpointType: target.type,
+            lastAttemptAt: new Date().toISOString(),
+            lastError: cleanErrorMessage(error)
+          });
+          if (options.manual) setStatus('Still could not save. Downloads remain available.');
+          return false;
+        } finally {
+          renderAdmin();
         }
       }
 
