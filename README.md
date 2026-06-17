@@ -94,6 +94,9 @@ If Supabase reports a `Security Definer View` warning for an existing database, 
 alter view public.video_analytics_summary set (security_invoker = true);
 alter view public.video_keyword_choices set (security_invoker = true);
 alter view public.video_reason_choices set (security_invoker = true);
+alter view public.study_response_analysis set (security_invoker = true);
+alter view public.study_round_reflections set (security_invoker = true);
+alter view public.study_round_liked_videos set (security_invoker = true);
 ```
 
 When hosted over HTTP, the participant page sends event batches and final responses to `study-save.php`. The endpoint checks every submitted keyword against `data/video-manifest.json`, then stores the manifest-side keyword confidence/source/rank in Supabase. This means participants only see simple keyword chips, while researchers can query confidence scores later.
@@ -107,6 +110,36 @@ select * from public.video_analytics_summary order by likes desc, impressions de
 select * from public.video_events where video_id = 'apple-season-ad-variant-1' order by created_at;
 select * from public.video_keyword_choices where video_id = 'apple-season-ad-variant-1';
 select * from public.video_reason_choices where video_id = 'apple-season-ad-variant-1';
+select * from public.study_response_analysis order by submitted_at desc limit 20;
+select * from public.study_round_reflections order by submitted_at desc limit 20;
+select * from public.study_round_liked_videos where participant_id = 'demo-001';
+```
+
+Useful starting points for math/statistics analysis:
+
+```sql
+select
+  model_name,
+  count(*) filter (where liked is true) as likes,
+  avg(video_quality_score) as avg_quality,
+  avg(relevance_score) as avg_relevance,
+  avg(ai_match_score) as avg_ai_match,
+  avg(max_watch_percent) as avg_watch_percent
+from public.study_response_analysis
+where round = 2
+group by model_name
+order by avg_relevance desc nulls last, likes desc;
+
+select
+  participant_genre,
+  count(*) as responses,
+  avg(video_quality_score) as avg_quality,
+  avg(relevance_score) as avg_relevance
+from public.study_response_analysis
+where participant_genre is not null
+  and participant_genre <> ''
+group by participant_genre
+order by responses desc;
 ```
 
 For a participant-page smoke test, open `research-feed.html?admin=1&fresh=1&participant=auto&study=smoke-test`.

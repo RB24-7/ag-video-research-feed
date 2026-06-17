@@ -161,6 +161,43 @@
         -webkit-backdrop-filter: blur(12px);
       }
 
+      .video-title {
+        width: fit-content;
+        max-width: 100%;
+        padding: 8px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 0.86rem;
+        font-weight: 700;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      .video-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .context-pill {
+        width: fit-content;
+        max-width: 100%;
+        padding: 6px 8px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.38);
+        color: rgba(255, 255, 255, 0.76);
+        font-size: 0.72rem;
+        line-height: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       .reel-progress {
         position: absolute;
         left: 0;
@@ -317,6 +354,13 @@
       .kw-chip:hover:not(:disabled) { border-color: rgba(255,255,255,0.4); color: #f7f7f8; }
       .kw-chip.selected { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.6); color: #f7f7f8; }
       .kw-chip:disabled:not(.selected) { opacity: 0.3; cursor: not-allowed; }
+      .survey-video-context { display: grid; gap: 8px; margin: 0 0 18px; padding: 14px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); }
+      .survey-video-context strong { color: #f7f7f8; font-size: 0.95rem; line-height: 1.35; overflow-wrap: anywhere; }
+      .survey-video-context span { color: rgba(247,247,248,0.64); font-size: 0.82rem; line-height: 1.4; }
+      .choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin-bottom: 20px; }
+      .choice-chip { appearance: none; cursor: pointer; border: 1px solid rgba(255,255,255,0.12); border-radius: 0; background: rgba(255,255,255,0.08); color: rgba(247,247,248,0.72); min-height: 42px; padding: 9px 12px; text-align: left; font: inherit; font-size: 0.84rem; line-height: 1.25; transition: all 0.15s ease; }
+      .choice-chip:hover { border-color: rgba(255,255,255,0.34); color: #f7f7f8; }
+      .choice-chip.selected { border-color: rgba(255,53,95,0.72); background: rgba(255,53,95,0.16); color: #f7f7f8; }
       .dislike-options { display: grid; gap: 10px; margin-bottom: 22px; }
       .dislike-option { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border: 1px solid rgba(255,255,255,0.12); border-radius: 0; background: rgba(255,255,255,0.08); cursor: pointer; transition: all 0.15s ease; user-select: none; }
       .dislike-option:hover { border-color: rgba(255,255,255,0.25); }
@@ -327,6 +371,12 @@
       .dislike-label { font-size: 0.92rem; color: #f7f7f8; }
       .reason-section { margin: 8px 0 20px; }
       .reason-title { margin: 0 0 10px; font-size: 0.82rem; color: rgba(247,247,248,0.64); text-transform: uppercase; letter-spacing: 0.08em; }
+      .survey-textarea { width: 100%; min-height: 94px; resize: vertical; border: 1px solid rgba(255,255,255,0.12); border-radius: 0; background: rgba(255,255,255,0.08); color: #f7f7f8; padding: 12px; font: inherit; line-height: 1.45; outline: none; }
+      .survey-textarea:focus { border-color: rgba(255,255,255,0.42); }
+      .discussion-summary { display: grid; gap: 10px; margin-bottom: 18px; }
+      .discussion-card { padding: 12px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); }
+      .discussion-card strong { display: block; color: #f7f7f8; margin-bottom: 5px; overflow-wrap: anywhere; }
+      .discussion-card span { display: block; color: rgba(247,247,248,0.68); font-size: 0.82rem; line-height: 1.45; }
       .submit-screen { display: none; position: fixed; inset: 0; z-index: 60; flex-direction: column; align-items: center; justify-content: center; background: #050608; padding: 32px; text-align: center; overflow-y: auto; }
       .submit-screen.show { display: flex; }
       .submit-screen h2 { font-size: 2rem; font-weight: 700; margin: 0 0 12px; color: #f7f7f8; }
@@ -408,7 +458,7 @@
     <div class="modal-backdrop show" id="welcomeModal">
       <div class="modal-box" style="text-align:center;">
         <h3 style="font-size:1.4rem;margin-bottom:10px;">Welcome!</h3>
-        <p class="modal-sub" style="margin-bottom:20px;">You will be shown a series of short ads. Like one that feels interesting or engaging, then give quick feedback on a few related videos.</p>
+        <p class="modal-sub" style="margin-bottom:20px;">You will be shown a series of short ads. Like one original video that feels interesting, then give quick feedback on two related recommended videos.</p>
         <div class="modal-footer" style="justify-content:center;"><button class="modal-btn primary" id="welcomeStart" type="button">Get Started</button></div>
       </div>
     </div>
@@ -422,6 +472,7 @@
     <div class="modal-backdrop" id="keywordModal">
       <div class="modal-box">
         <h3>What stood out to you?</h3>
+        <div class="survey-video-context" id="keywordVideoContext"></div>
         <p class="modal-sub">Select up to 3 keywords that best describe why you liked this video.</p>
         <div class="kw-counter">Selected: <span id="kwCount">0</span> / 3</div>
         <div class="keyword-modal-grid" id="keywordModalGrid"></div>
@@ -432,6 +483,46 @@
             <label class="dislike-option" data-value="attention_grabbing"><span class="dislike-check"></span><span class="dislike-label">Grabbed my attention</span></label>
             <label class="dislike-option" data-value="visual_style"><span class="dislike-check"></span><span class="dislike-label">Liked the visual style</span></label>
             <label class="dislike-option" data-value="product_relevant"><span class="dislike-check"></span><span class="dislike-label">Product felt relevant</span></label>
+          </div>
+        </div>
+        <div class="reason-section">
+          <p class="reason-title">Video quality</p>
+          <div class="choice-grid" id="qualityOptions">
+            <button class="choice-chip" data-value="low" type="button">Low</button>
+            <button class="choice-chip" data-value="fair" type="button">Fair</button>
+            <button class="choice-chip" data-value="good" type="button">Good</button>
+            <button class="choice-chip" data-value="excellent" type="button">Excellent</button>
+          </div>
+        </div>
+        <div class="reason-section">
+          <p class="reason-title">Relevance to your interest</p>
+          <div class="choice-grid" id="relevanceOptions">
+            <button class="choice-chip" data-value="low" type="button">Low</button>
+            <button class="choice-chip" data-value="somewhat" type="button">Somewhat</button>
+            <button class="choice-chip" data-value="strong" type="button">Strong</button>
+          </div>
+        </div>
+        <div class="reason-section">
+          <p class="reason-title">Genre classification</p>
+          <div class="choice-grid" id="genreOptions">
+            <button class="choice-chip" data-value="marketing" type="button">Marketing</button>
+            <button class="choice-chip" data-value="educational" type="button">Educational</button>
+            <button class="choice-chip" data-value="technology" type="button">Technology</button>
+            <button class="choice-chip" data-value="entertainment" type="button">Entertainment</button>
+            <button class="choice-chip" data-value="documentary" type="button">Documentary</button>
+            <button class="choice-chip" data-value="tutorial" type="button">Tutorial</button>
+            <button class="choice-chip" data-value="news" type="button">News</button>
+            <button class="choice-chip" data-value="sports" type="button">Sports</button>
+            <button class="choice-chip" data-value="other_unsure" type="button">Other / unsure</button>
+          </div>
+        </div>
+        <div class="reason-section">
+          <p class="reason-title">AI match</p>
+          <div class="choice-grid" id="aiMatchOptions">
+            <button class="choice-chip" data-value="poor" type="button">Poor match</button>
+            <button class="choice-chip" data-value="partial" type="button">Partial match</button>
+            <button class="choice-chip" data-value="good" type="button">Good match</button>
+            <button class="choice-chip" data-value="great" type="button">Great match</button>
           </div>
         </div>
         <div class="modal-footer">
@@ -455,6 +546,38 @@
         <div class="modal-footer">
           <button class="modal-btn" id="dlSkip" type="button">Skip</button>
           <button class="modal-btn primary" id="dlConfirm" type="button">Confirm</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop" id="reflectionModal">
+      <div class="modal-box">
+        <h3>Your notes for discussion</h3>
+        <p class="modal-sub">Review your liked videos, then answer the final match question before continuing.</p>
+        <div class="discussion-summary" id="reflectionSummary"></div>
+        <div class="reason-section">
+          <p class="reason-title">How well did the AI match your interests?</p>
+          <div class="choice-grid" id="reflectionMatchOptions">
+            <button class="choice-chip" data-value="poor" type="button">Poor match</button>
+            <button class="choice-chip" data-value="partial" type="button">Partial match</button>
+            <button class="choice-chip" data-value="good" type="button">Good match</button>
+            <button class="choice-chip" data-value="great" type="button">Great match</button>
+          </div>
+        </div>
+        <div class="reason-section">
+          <p class="reason-title">Issues noticed</p>
+          <div class="dislike-options" id="reflectionIssueOptions">
+            <label class="dislike-option" data-value="none"><span class="dislike-check"></span><span class="dislike-label">No major issue</span></label>
+            <label class="dislike-option" data-value="quality"><span class="dislike-check"></span><span class="dislike-label">Video quality issue</span></label>
+            <label class="dislike-option" data-value="relevance"><span class="dislike-check"></span><span class="dislike-label">Relevance issue</span></label>
+            <label class="dislike-option" data-value="genre"><span class="dislike-check"></span><span class="dislike-label">Genre classification issue</span></label>
+          </div>
+        </div>
+        <div class="reason-section">
+          <p class="reason-title">Optional note</p>
+          <textarea class="survey-textarea" id="reflectionNote" maxlength="500" placeholder="Briefly note why you selected your favorites or any issue you noticed."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn primary" id="reflectionConfirm" type="button">Save and continue</button>
         </div>
       </div>
     </div>
@@ -956,7 +1079,7 @@
 
         const visibleVariants = getVisibleStudyVariants();
         if (visibleVariants.length > 0 && visibleVariants.every(hasVariantResponse)) {
-          finishVariantRound('responses_complete');
+          openReflectionModal('responses_complete');
           return;
         }
 
@@ -981,6 +1104,7 @@
 
         state.study.phase = 'seed';
         state.study.selectedVariantId = null;
+        state.study.roundReflection = null;
         if (state.study.seedId) {
           state.likes[state.study.seedId] = false;
           localStorage.setItem(LIKES_KEY, JSON.stringify(state.likes));
@@ -1046,6 +1170,7 @@
           .map((item) => {
             const isVariant = item.studyRole === 'variant';
             const studyLabel = isVariant ? item.shortLabel || item.modelName || 'Generated' : '';
+            const genreLabel = getGenreLabel(item.category || (isVariant ? 'Generated' : 'Original'));
             return `
               <article class="reel-card" data-video-id="${escapeAttr(item.id)}">
                 <div class="phone-frame">
@@ -1059,6 +1184,11 @@
                     loop
                   ></video>
                   <div class="study-overlay">
+                    <span class="video-title">${escapeHtml(item.title || item.shortLabel || item.id)}</span>
+                    <span class="video-meta">
+                      <span class="context-pill">${escapeHtml(genreLabel)}</span>
+                      ${item.modelName ? `<span class="context-pill">${escapeHtml(item.modelName)}</span>` : ''}
+                    </span>
                     ${studyLabel ? `<span class="study-label">${escapeHtml(studyLabel)}</span>` : ''}
                   </div>
                   ${!isVariant ? (() => { const n = countSeedLikes(); return `<div class="like-cap-bar">${Array.from({ length: R1_LIKE_CAP }, (_, i) => `<span class="like-pip${n > i ? ' filled' : ''}"></span>`).join('')}<span>${n}/${R1_LIKE_CAP}</span></div>`; })() : ''}
@@ -1329,6 +1459,16 @@
         return Number.isInteger(state.playbackRate)
           ? state.playbackRate + 'x'
           : state.playbackRate + 'x';
+      }
+
+      function getGenreLabel(value) {
+        const cleaned = String(value || 'Uncategorized')
+          .replace(/[_-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return cleaned
+          ? cleaned.replace(/\b\w/g, (letter) => letter.toUpperCase())
+          : 'Uncategorized';
       }
 
       function trackProgress(videoId, percent) {
@@ -1929,7 +2069,10 @@
           selectedVariantId: study.selectedVariantId || null,
           keywordChoices: study.keywordChoices && typeof study.keywordChoices === 'object'
             ? study.keywordChoices
-            : {}
+            : {},
+          roundReflection: study.roundReflection && typeof study.roundReflection === 'object'
+            ? study.roundReflection
+            : null
         };
       }
 
@@ -2066,6 +2209,7 @@
       const R1_LIKE_CAP = 1;
       let pendingLikeId = null;
       let pendingDlId = null;
+      let pendingFinishReason = null;
 
       const ICON_THUMBSUP = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>';
       const ICON_DISLIKE   = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/><path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>';
@@ -2115,10 +2259,22 @@
       });
 
       // Keyword modal
+      ['qualityOptions', 'relevanceOptions', 'genreOptions', 'aiMatchOptions', 'reflectionMatchOptions'].forEach(setupSingleChoiceGroup);
       document.getElementById('likeReasonOptions').querySelectorAll('.dislike-option').forEach(o => {
         o.addEventListener('click', () => o.classList.toggle('checked'));
       });
-      document.getElementById('kwSkip').addEventListener('click', () => closeKeywordModal(null));
+      document.getElementById('reflectionIssueOptions').querySelectorAll('.dislike-option').forEach(o => {
+        o.addEventListener('click', () => {
+          if (o.dataset.value === 'none') {
+            document.getElementById('reflectionIssueOptions').querySelectorAll('.dislike-option').forEach(option => option.classList.remove('checked'));
+            o.classList.add('checked');
+            return;
+          }
+          document.getElementById('reflectionIssueOptions').querySelector('[data-value="none"]')?.classList.remove('checked');
+          o.classList.toggle('checked');
+        });
+      });
+      document.getElementById('kwSkip').addEventListener('click', () => closeKeywordModal(null, [], getKeywordSurveyValues()));
       document.getElementById('kwConfirm').addEventListener('click', () => {
         const sel = [...document.getElementById('keywordModalGrid').querySelectorAll('.kw-chip.selected')].map(c => ({
           id: c.dataset.kwId || '',
@@ -2128,15 +2284,25 @@
           rank: c.dataset.rank ? Number(c.dataset.rank) : null
         }));
         const likeReasons = [...document.getElementById('likeReasonOptions').querySelectorAll('.dislike-option.checked')].map(o => o.dataset.value);
-        closeKeywordModal(sel, likeReasons);
+        closeKeywordModal(sel, likeReasons, getKeywordSurveyValues());
+      });
+      document.getElementById('reflectionConfirm').addEventListener('click', () => {
+        closeReflectionModal();
       });
 
       function openKeywordModal(videoId, keywords, keywordDetails) {
         pendingLikeId = videoId;
         const grid = document.getElementById('keywordModalGrid');
+        const item = state.items.find((candidate) => candidate.id === videoId);
+        document.getElementById('keywordVideoContext').innerHTML = renderSurveyVideoContext(item);
+        document.querySelector('#keywordModal .modal-box').scrollTop = 0;
         document.getElementById('kwCount').textContent = '0';
         document.getElementById('kwConfirm').disabled = true;
         document.getElementById('likeReasonOptions').querySelectorAll('.dislike-option').forEach(o => o.classList.remove('checked'));
+        resetChoiceGroup('qualityOptions');
+        resetChoiceGroup('relevanceOptions');
+        resetChoiceGroup('genreOptions');
+        resetChoiceGroup('aiMatchOptions');
         const choices = normalizeKeywordDetails(keywordDetails, keywords || FALLBACK_KEYWORDS, videoId);
         grid.innerHTML = choices.map(kw =>
           '<button class="kw-chip" data-kw-id="' + escapeAttr(kw.id) + '" data-kw="' + escapeAttr(kw.text) + '" data-confidence="' + escapeAttr(kw.confidence ?? '') + '" data-source="' + escapeAttr(kw.source || '') + '" data-rank="' + escapeAttr(kw.rank ?? '') + '" type="button">' + escapeHtml(kw.text) + '</button>'
@@ -2153,14 +2319,22 @@
         document.getElementById('keywordModal').classList.add('show');
       }
 
-      function closeKeywordModal(selectedKeywords, likeReasons = []) {
+      function closeKeywordModal(selectedKeywords, likeReasons = [], survey = {}) {
         document.getElementById('keywordModal').classList.remove('show');
         const vid = pendingLikeId; pendingLikeId = null;
         if (!vid) return;
+        const item = state.items.find((candidate) => candidate.id === vid);
         if (!responses[vid]) responses[vid] = {};
         responses[vid].liked = true;
         responses[vid].respondedAt = new Date().toISOString();
+        responses[vid].videoTitle = item?.title || '';
+        responses[vid].videoGenre = item?.category || '';
+        responses[vid].modelName = item?.modelName || '';
         responses[vid].likeReasons = likeReasons || [];
+        responses[vid].videoQuality = survey.videoQuality || '';
+        responses[vid].relevanceRating = survey.relevanceRating || '';
+        responses[vid].genreClassification = survey.genreClassification || '';
+        responses[vid].aiMatchRating = survey.aiMatchRating || '';
         let responseType = 'keywords_skipped';
         if (selectedKeywords && selectedKeywords.length) {
           responses[vid].keywords = selectedKeywords.map((keyword) => keyword.text);
@@ -2168,17 +2342,19 @@
           recordEvent(vid, 'keywords_selected', responses[vid].keywords.join(','), {
             count: selectedKeywords.length,
             keywordDetails: selectedKeywords,
-            likeReasons: responses[vid].likeReasons
+            likeReasons: responses[vid].likeReasons,
+            survey
           });
           responseType = 'keywords_selected';
         } else {
           responses[vid].keywords = [];
           responses[vid].keywordDetails = [];
-          recordEvent(vid, 'keywords_skipped', '', { likeReasons: responses[vid].likeReasons });
+          recordEvent(vid, 'keywords_skipped', '', { likeReasons: responses[vid].likeReasons, survey });
         }
         if (responses[vid].likeReasons.length) {
           recordEvent(vid, 'like_reasons', responses[vid].likeReasons.join(','));
         }
+        recordEvent(vid, 'like_survey_completed', responses[vid].genreClassification || '', survey);
         localStorage.setItem(RESPONSES_KEY, JSON.stringify(responses));
         completeVariantResponse(vid, responseType);
       }
@@ -2204,9 +2380,13 @@
         document.getElementById('dislikeModal').classList.remove('show');
         const vid = pendingDlId; pendingDlId = null;
         if (!vid) return;
+        const item = state.items.find((candidate) => candidate.id === vid);
         if (!responses[vid]) responses[vid] = {};
         responses[vid].liked = false;
         responses[vid].respondedAt = new Date().toISOString();
+        responses[vid].videoTitle = item?.title || '';
+        responses[vid].videoGenre = item?.category || '';
+        responses[vid].modelName = item?.modelName || '';
         let responseType = 'dislike_skipped';
         if (reasons && reasons.length) {
           responses[vid].dislikeReasons = reasons;
@@ -2221,6 +2401,118 @@
         }
         localStorage.setItem(RESPONSES_KEY, JSON.stringify(responses));
         completeVariantResponse(vid, responseType);
+      }
+
+      function setupSingleChoiceGroup(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.querySelectorAll('.choice-chip').forEach((button) => {
+          button.addEventListener('click', () => {
+            const wasSelected = button.classList.contains('selected');
+            container.querySelectorAll('.choice-chip').forEach((choice) => choice.classList.remove('selected'));
+            if (!wasSelected) button.classList.add('selected');
+          });
+        });
+      }
+
+      function resetChoiceGroup(containerId) {
+        document.getElementById(containerId)?.querySelectorAll('.choice-chip').forEach((choice) => choice.classList.remove('selected'));
+      }
+
+      function getChoiceValue(containerId) {
+        return document.getElementById(containerId)?.querySelector('.choice-chip.selected')?.dataset.value || '';
+      }
+
+      function getKeywordSurveyValues() {
+        return {
+          videoQuality: getChoiceValue('qualityOptions'),
+          relevanceRating: getChoiceValue('relevanceOptions'),
+          genreClassification: getChoiceValue('genreOptions'),
+          aiMatchRating: getChoiceValue('aiMatchOptions')
+        };
+      }
+
+      function renderSurveyVideoContext(item) {
+        if (!item) {
+          return '<strong>Selected video</strong><span>Video details were not available.</span>';
+        }
+
+        const pieces = [
+          item.category ? `Genre shown by system: ${getGenreLabel(item.category)}` : '',
+          item.modelName ? `Model: ${item.modelName}` : '',
+          item.studyRole === 'variant' ? 'Recommended video' : 'Original video'
+        ].filter(Boolean);
+
+        return '<strong>' + escapeHtml(item.title || item.id) + '</strong>' +
+          '<span>' + escapeHtml(pieces.join(' | ')) + '</span>';
+      }
+
+      function openReflectionModal(reason) {
+        pendingFinishReason = reason || 'responses_complete';
+        document.getElementById('reflectionSummary').innerHTML = renderReflectionSummary();
+        document.querySelector('#reflectionModal .modal-box').scrollTop = 0;
+        resetChoiceGroup('reflectionMatchOptions');
+        document.getElementById('reflectionIssueOptions').querySelectorAll('.dislike-option').forEach(option => option.classList.remove('checked'));
+        document.getElementById('reflectionNote').value = '';
+        document.getElementById('reflectionModal').classList.add('show');
+      }
+
+      function closeReflectionModal() {
+        const reflection = collectRoundReflection();
+        state.study.roundReflection = reflection;
+        saveStudyState();
+        recordEvent('session', 'round_reflection_saved', reflection.matchRating || '', reflection);
+        document.getElementById('reflectionModal').classList.remove('show');
+        finishVariantRound(pendingFinishReason || 'responses_complete');
+        pendingFinishReason = null;
+      }
+
+      function collectRoundReflection() {
+        return {
+          matchRating: getChoiceValue('reflectionMatchOptions'),
+          issues: [...document.getElementById('reflectionIssueOptions').querySelectorAll('.dislike-option.checked')].map(option => option.dataset.value),
+          note: document.getElementById('reflectionNote').value.trim().slice(0, 500),
+          likedVideos: getVisibleStudyVariants()
+            .filter((item) => responses[item.id]?.liked === true)
+            .map((item) => ({
+              videoId: item.id,
+              videoTitle: item.title,
+              modelName: item.modelName || '',
+              genreClassification: responses[item.id]?.genreClassification || '',
+              videoQuality: responses[item.id]?.videoQuality || '',
+              relevanceRating: responses[item.id]?.relevanceRating || '',
+              aiMatchRating: responses[item.id]?.aiMatchRating || '',
+              likeReasons: responses[item.id]?.likeReasons || [],
+              keywords: responses[item.id]?.keywords || []
+            }))
+        };
+      }
+
+      function renderReflectionSummary() {
+        const liked = getVisibleStudyVariants().filter((item) => responses[item.id]?.liked === true);
+        const fallback = getVisibleStudyVariants().filter((item) => responses[item.id]).slice(0, 2);
+        const items = liked.length ? liked : fallback;
+
+        if (!items.length) {
+          return '<div class="discussion-card"><strong>No liked videos yet</strong><span>You can still note how well the recommendations matched your interests.</span></div>';
+        }
+
+        return items.map((item, index) => {
+          const response = responses[item.id] || {};
+          const details = [
+            item.modelName ? `Model: ${item.modelName}` : '',
+            response.genreClassification ? `Genre: ${getGenreLabel(response.genreClassification)}` : (item.category ? `Genre: ${getGenreLabel(item.category)}` : ''),
+            response.videoQuality ? `Quality: ${getGenreLabel(response.videoQuality)}` : '',
+            response.relevanceRating ? `Relevance: ${getGenreLabel(response.relevanceRating)}` : '',
+            response.keywords?.length ? `Keywords: ${response.keywords.join(', ')}` : '',
+            response.likeReasons?.length ? `Why liked: ${response.likeReasons.map(getGenreLabel).join(', ')}` : ''
+          ].filter(Boolean).join(' | ');
+
+          return '<div class="discussion-card">' +
+            '<strong>' + (index + 1) + '. ' + escapeHtml(item.title || item.id) + '</strong>' +
+            '<span>' + escapeHtml(details || 'No extra details selected.') + '</span>' +
+            '</div>';
+        }).join('');
       }
 
       // Submit screen
@@ -2399,6 +2691,11 @@
             modelName: '',
             round: 1,
             liked: !!state.likes[item.id],
+            videoGenre: item.category || '',
+            genreClassification: item.category || '',
+            videoQuality: '',
+            relevanceRating: '',
+            aiMatchRating: '',
             dislikeReasons: [],
             keywords: [],
             keywordDetails: [],
@@ -2418,10 +2715,16 @@
               modelName: item.modelName || '',
               round: 2,
               liked: r.liked ?? null,
+              videoGenre: item.category || r.videoGenre || '',
+              genreClassification: r.genreClassification || '',
+              videoQuality: r.videoQuality || '',
+              relevanceRating: r.relevanceRating || '',
+              aiMatchRating: r.aiMatchRating || '',
               likeReasons: r.likeReasons || [],
               dislikeReasons: r.dislikeReasons || [],
               keywords: r.keywords || [],
               keywordDetails: r.keywordDetails || [],
+              roundReflection: state.study.roundReflection || null,
               maxWatchPercent: state.watchPercent[item.id] || 0,
               respondedAt: r.respondedAt || null,
               submittedAt
@@ -2450,10 +2753,35 @@
         const now = new Date().toISOString();
         const seeds = state.items.filter(i => i.studyRole === 'seed');
         const variants = getVisibleStudyVariants();
-        const headers = ['participantId','studyLabel','sessionId','videoId','videoTitle','modelName','round','liked','likeReasons','dislikeReasons','keywords','exportedAt'];
+        const headers = ['participantId','studyLabel','sessionId','videoId','videoTitle','modelName','round','liked','videoGenre','genreClassification','videoQuality','relevanceRating','aiMatchRating','likeReasons','dislikeReasons','keywords','reflectionMatch','reflectionIssues','reflectionNote','exportedAt'];
         const rows = [
-          ...seeds.map(item => [state.participantId, state.studyLabel, state.sessionId, item.id, item.title, '', 1, !!state.likes[item.id], '', '', '', now]),
-          ...variants.map(item => { const r = responses[item.id] || {}; return [state.participantId, state.studyLabel, state.sessionId, item.id, item.title, item.modelName||'', 2, r.liked??'', (r.likeReasons||[]).join('; '), (r.dislikeReasons||[]).join('; '), (r.keywords||[]).join('; '), now]; })
+          ...seeds.map(item => [state.participantId, state.studyLabel, state.sessionId, item.id, item.title, '', 1, !!state.likes[item.id], item.category || '', item.category || '', '', '', '', '', '', '', '', '', '', now]),
+          ...variants.map(item => {
+            const r = responses[item.id] || {};
+            const reflection = state.study.roundReflection || {};
+            return [
+              state.participantId,
+              state.studyLabel,
+              state.sessionId,
+              item.id,
+              item.title,
+              item.modelName || '',
+              2,
+              r.liked ?? '',
+              item.category || r.videoGenre || '',
+              r.genreClassification || '',
+              r.videoQuality || '',
+              r.relevanceRating || '',
+              r.aiMatchRating || '',
+              (r.likeReasons || []).join('; '),
+              (r.dislikeReasons || []).join('; '),
+              (r.keywords || []).join('; '),
+              reflection.matchRating || '',
+              (reflection.issues || []).join('; '),
+              reflection.note || '',
+              now
+            ];
+          })
         ].map(row => row.map(v => '"' + String(v).replaceAll('"','""') + '"').join(','));
         const blob = new Blob([[headers.join(','), ...rows].join('\n')], { type: 'text/csv' });
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob);

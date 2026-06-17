@@ -105,3 +105,146 @@ select
   submitted_at
 from public.study_responses,
   lateral jsonb_array_elements(dislike_reasons) reason;
+
+create or replace view public.study_response_analysis
+with (security_invoker = true) as
+select
+  id,
+  participant_id,
+  study_label,
+  session_id,
+  video_id,
+  video_title,
+  study_set_id,
+  seed_id,
+  model_name,
+  round,
+  liked,
+  max_watch_percent,
+  responded_at,
+  submitted_at,
+  received_at,
+  raw_response->>'videoGenre' as system_genre,
+  raw_response->>'genreClassification' as participant_genre,
+  raw_response->>'videoQuality' as video_quality,
+  case raw_response->>'videoQuality'
+    when 'low' then 1
+    when 'fair' then 2
+    when 'good' then 3
+    when 'excellent' then 4
+    else null
+  end as video_quality_score,
+  raw_response->>'relevanceRating' as relevance_rating,
+  case raw_response->>'relevanceRating'
+    when 'low' then 1
+    when 'somewhat' then 2
+    when 'strong' then 3
+    else null
+  end as relevance_score,
+  raw_response->>'aiMatchRating' as ai_match_rating,
+  case raw_response->>'aiMatchRating'
+    when 'poor' then 1
+    when 'partial' then 2
+    when 'good' then 3
+    when 'great' then 4
+    else null
+  end as ai_match_score,
+  jsonb_array_length(like_reasons) as like_reason_count,
+  jsonb_array_length(dislike_reasons) as dislike_reason_count,
+  jsonb_array_length(selected_keywords) as selected_keyword_count,
+  like_reasons,
+  dislike_reasons,
+  selected_keywords,
+  keyword_details,
+  raw_response#>>'{roundReflection,matchRating}' as round_match_rating,
+  case raw_response#>>'{roundReflection,matchRating}'
+    when 'poor' then 1
+    when 'partial' then 2
+    when 'good' then 3
+    when 'great' then 4
+    else null
+  end as round_match_score,
+  coalesce(raw_response#>'{roundReflection,issues}', '[]'::jsonb) as round_issues,
+  raw_response#>>'{roundReflection,note}' as round_note
+from public.study_responses;
+
+create or replace view public.study_round_reflections
+with (security_invoker = true) as
+select distinct on (participant_id, session_id, study_set_id)
+  participant_id,
+  study_label,
+  session_id,
+  study_set_id,
+  seed_id,
+  raw_response#>'{roundReflection}' as round_reflection,
+  raw_response#>>'{roundReflection,matchRating}' as match_rating,
+  case raw_response#>>'{roundReflection,matchRating}'
+    when 'poor' then 1
+    when 'partial' then 2
+    when 'good' then 3
+    when 'great' then 4
+    else null
+  end as match_score,
+  coalesce(raw_response#>'{roundReflection,issues}', '[]'::jsonb) as issues,
+  raw_response#>>'{roundReflection,note}' as note,
+  submitted_at,
+  received_at
+from public.study_responses
+where raw_response ? 'roundReflection'
+  and raw_response#>'{roundReflection}' is not null
+order by participant_id, session_id, study_set_id, submitted_at desc;
+
+create or replace view public.study_round_liked_videos
+with (security_invoker = true) as
+with reflections as (
+  select distinct on (participant_id, session_id, study_set_id)
+    participant_id,
+    study_label,
+    session_id,
+    study_set_id,
+    seed_id,
+    raw_response#>'{roundReflection}' as round_reflection,
+    submitted_at
+  from public.study_responses
+  where raw_response ? 'roundReflection'
+    and raw_response#>'{roundReflection,likedVideos}' is not null
+  order by participant_id, session_id, study_set_id, submitted_at desc
+)
+select
+  reflections.participant_id,
+  reflections.study_label,
+  reflections.session_id,
+  reflections.study_set_id,
+  reflections.seed_id,
+  liked_video->>'videoId' as video_id,
+  liked_video->>'videoTitle' as video_title,
+  liked_video->>'modelName' as model_name,
+  liked_video->>'genreClassification' as participant_genre,
+  liked_video->>'videoQuality' as video_quality,
+  case liked_video->>'videoQuality'
+    when 'low' then 1
+    when 'fair' then 2
+    when 'good' then 3
+    when 'excellent' then 4
+    else null
+  end as video_quality_score,
+  liked_video->>'relevanceRating' as relevance_rating,
+  case liked_video->>'relevanceRating'
+    when 'low' then 1
+    when 'somewhat' then 2
+    when 'strong' then 3
+    else null
+  end as relevance_score,
+  liked_video->>'aiMatchRating' as ai_match_rating,
+  case liked_video->>'aiMatchRating'
+    when 'poor' then 1
+    when 'partial' then 2
+    when 'good' then 3
+    when 'great' then 4
+    else null
+  end as ai_match_score,
+  coalesce(liked_video->'likeReasons', '[]'::jsonb) as like_reasons,
+  coalesce(liked_video->'keywords', '[]'::jsonb) as keywords,
+  reflections.submitted_at
+from reflections,
+  lateral jsonb_array_elements(reflections.round_reflection->'likedVideos') liked_video;
